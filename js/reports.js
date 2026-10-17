@@ -860,7 +860,7 @@
           [h('span.mspacer'), B('Log', logReport, { small: true })],
         ]),
         sec('Sow information', [
-          [B('Action lists', () => S.actionLists.open(), { direct: true }), B('Additional sheets', additionalSheets), B('Sow cards', sowCards)],
+          [B('Action lists', () => S.actionLists.open(), { direct: true }), B('Additional sheets', additionalSheets), B('Sow cards', () => S.sowCard.open(), { direct: true })],
           [B('Farrowing rate monitor', farrowingRateMonitor), B('Sow inventory', sowInventory), B('Sow selection', sowSelection), B('Vaccinations', vaccinations)],
         ]),
         sec('Application tools', [

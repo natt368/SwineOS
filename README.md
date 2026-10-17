@@ -22,6 +22,8 @@ It is a plain web app (HTML, CSS and JavaScript, no build step and no server). O
 - Application tools on litter records: breakdown, cross tabulation, histogram, scatter table, statistics, frequency distribution, time plot, X-Y plot.
 - Piglet reports (deaths, fostering, piglet inventory, weaning list) and boar reports (inventory, usage per week, farrowing rate and litter size per boar).
 
+**Sow cards** – one sow's card as in the old program: averages and last litter (farrowing interval, gestation length, born alive / dead, mummified, deaths, net foster, weaned), last service boar, full history with mating groups and due dates (farrowings in yellow), selected events, lifetime summary or comments; due date, alt ID, genetics, location, mating group, status and parity on the right. Build a print list from the Available / Selected lists or pick sows with *Mating +21 / +35 / +42 / +60* and *Due date −15 / −10 / −5* for a From–To period.
+
 **Action lists** – the weekly work lists: gilts to serve, open sows, repeat services, heat checks at 3 and 6 weeks, pregnancy checks, sows due to farrow, sows to wean, and due vaccinations, with writing space and a code list. Preview, print, or save as a file.
 
 **Settings** – farm name and number, gestation length, code lists (locations, cull reasons, piglet death causes, treatments…), vaccination schedule, performance targets, action-list defaults, backup / restore, CSV import of animals, and an example herd for trying the program.
@@ -33,7 +35,7 @@ It is a plain web app (HTML, CSS and JavaScript, no build step and no server). O
 
 ## Hosting on GitHub Pages
 
-The workflow in `.github/workflows/pages.yml` publishes the default branch. Turn it on once: repository **Settings → Pages → Build and deployment → Source: GitHub Actions**. After the next push the app is at `https://<owner>.github.io/<repo>/`.
+The workflow in `.github/workflows/pages.yml` publishes the default branch. Until Pages is switched on, the workflow finishes with a warning instead of deploying. Turn it on once: repository **Settings → Pages → Build and deployment → Source: GitHub Actions**. After the next push the app is at `https://<owner>.github.io/<repo>/`.
 
 `node scripts/build-single.mjs` writes `dist/swineos.html`, a single file with everything inlined that can be copied to a USB stick or emailed and opened offline.
 
@@ -46,6 +48,7 @@ The workflow in `.github/workflows/pages.yml` publishes the default branch. Turn
 | `js/calc.js` | Herd performance calculations and indicator definitions |
 | `js/entry.js` | Sow data entry window, event forms and validation |
 | `js/reports.js` | Reports menu and all report windows |
+| `js/sowcard.js` | Sow card window |
 | `js/actionlists.js` | Action lists dialog and printout |
 | `js/settings.js` | Settings, backup / restore, import |
 | `js/demo.js` | Example herd generator |

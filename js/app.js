@@ -74,6 +74,7 @@
         h('button.navy-btn.big', { type: 'button', onclick: () => app.reports('sows') }, 'Sow / gilt reports'),
         h('button.navy-btn.big', { type: 'button', onclick: () => app.show(S.reports.herdPerformance) }, 'Herd performance'),
         h('button.navy-btn.big', { type: 'button', onclick: () => S.actionLists.open() }, 'Action lists'),
+        h('button.navy-btn.big', { type: 'button', onclick: () => S.sowCard.open() }, 'Sow cards'),
         h('button.navy-btn.big', { type: 'button', onclick: () => app.reports('piglets') }, 'Piglet reports'),
         h('button.navy-btn.big', { type: 'button', onclick: () => app.reports('boars') }, 'Boar reports')),
       h('div.home-foot', `Records stored ${S.store.state.backend === 'cloud' ? 'in the shared online database' : 'in this browser – download a backup regularly'}.`)));

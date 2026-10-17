@@ -325,12 +325,13 @@
       ui().field('Location', ui().select('a-loc', [''].concat(L.locations), x.location || '')),
       ui().field('Origin / supplier', ui().input('a-origin', x.origin || '')),
       ui().field('Dam / sire', ui().input('a-dam', x.pedigree || '', { placeholder: 'optional' })),
+      ui().field('Alt ID', ui().input('a-alt', x.altId || '', { maxlength: 30, placeholder: 'tattoo, RFID, registration no.' })),
       ui().field('Remarks', ui().input('a-rem', x.remarks || '')));
     const read = () => ({
       id: U.$('#a-id').value.trim(), sex: U.$('#a-sex').value, birthDate: U.$('#a-birth').value || undefined,
       arrivalDate: U.$('#a-arr').value || undefined, entryDate: U.$('#a-entry').value || undefined,
       entryParity: +U.$('#a-par').value || 0, breed: U.$('#a-breed').value || undefined, location: U.$('#a-loc').value || undefined,
-      origin: U.$('#a-origin').value.trim() || undefined, pedigree: U.$('#a-dam').value.trim() || undefined, remarks: U.$('#a-rem').value.trim() || undefined,
+      origin: U.$('#a-origin').value.trim() || undefined, pedigree: U.$('#a-dam').value.trim() || undefined, remarks: U.$('#a-rem').value.trim() || undefined, altId: U.$('#a-alt').value.trim() || undefined,
     });
     return { node, read };
   }
@@ -434,6 +435,7 @@
 
     const tb = h('div.toolbar.entry-tb',
       tbBtn('enter', 'Enter', enter), tbBtn('edit', 'Edit', editSel), tbBtn('del', 'Delete', delSel), h('span.tb-sep'),
+      tbBtn('details', 'Sow card', () => S.sowCard.open(st.sel)), h('span.tb-sep'),
       tbBtn('settings', 'Settings', () => S.settingsUI.open('entry')), tbBtn('help', 'Help', () => S.app.help('entry')), h('span.tb-sep'),
       tbBtn('close', 'Close', () => S.app.home()));
     function tbBtn(ic, label, fn) { return h('button.tb-btn', { type: 'button', onclick: fn }, ui().icon(ic), h('span', label)); }
@@ -483,7 +485,7 @@
       const rows = listRows().sort((x, y) => (A(y).statusDate || '').localeCompare(A(x).statusDate || '') || U.natCmp(x.id, y.id));
       list.update(rows, st.sel && st.sel.uid);
       count.textContent = `${rows.length} animals` + (st.search ? ' · ' + st.search.label : '');
-      win.querySelector('.win-name').textContent = `Sow data entry  (${S.store.animals().filter((a) => !A(a).removed).length} animals active)  -  [${S.store.settings.farmNumber} ${S.store.settings.farmName}]`;
+      win.querySelector('.win-name').textContent = `Sow data entry  (${rows.length} Sows selected)  -  [${S.store.settings.farmNumber} ${S.store.settings.farmName}]`;
       renderTabs();
     }
     function select(a, fromList) {
