@@ -178,10 +178,46 @@
       ui().toast(`${label}: ${hits.length} sows selected.`);
     }
     function printCards() {
-      const list = (st.selected.length ? st.selected.map((u) => S.store.get(u)) : [st.current]).filter(Boolean);
-      if (!list.length) { ui().toast('Pick a sow, or move sows to the Selected list.'); return; }
-      ui().printPreview(`Sow cards (${list.length})`, h('div.cards', list.slice(0, 300).map((a) => S.reports.sowCard(a))));
+      const cur = st.current; const pl = pool();
+      const o = { which: st.selected.length ? 'selected' : 'one', data: true, template: true, sort: 'entry', layout: 'half' };
+      const radio = (name, val, label, checked) => h('label.blk', h('input', { type: 'radio', name, checked, onchange: () => { o[name] = val; } }), ' ', label);
+      const chk = (key, label) => h('label.blk', h('input', { type: 'checkbox', checked: o[key], onchange: (e) => { o[key] = e.target.checked; } }), ' ', label);
+      const body = h('div.sc-print',
+        h('fieldset', h('legend', 'Options'),
+          radio('which', 'one', `Print sow ${cur ? cur.id : '–'}`, o.which === 'one'),
+          radio('which', 'selected', `Print selected sows (${st.selected.length})`, o.which === 'selected'),
+          radio('which', 'all', `Print all sows (${pl.length})`, false)),
+        h('fieldset', h('legend', 'Layout options'), chk('data', 'Print data'), chk('template', 'Print template (blank lines to write on)')),
+        h('fieldset', h('legend', 'Sort by'), h('div.two-col',
+          radio('sort', 'id', 'ID', false), radio('sort', 'stage', 'Production stage', false),
+          radio('sort', 'location', 'Location', false), radio('sort', 'entry', 'According to entry', true),
+          radio('sort', 'mating', 'Mating date', false), radio('sort', 'group', 'Mating group', false))),
+        h('fieldset', h('legend', 'Sow card layout options'), ui().select('sc-layout', [['half', 'Half: Standard / Event history'], ['full', 'Full: Standard / Event history'], ['lt', 'Half: Lifetime summary']], 'half', { onchange: (e) => { o.layout = e.target.value; } })));
+      const build = () => {
+        let list = o.which === 'one' ? [cur] : o.which === 'selected' ? st.selected.map((u) => S.store.get(u)) : pl;
+        list = list.filter(Boolean);
+        const key = {
+          id: (a) => a.id, location: (a) => A(a).location || '~', mating: (a) => (A(a).lastService ? A(a).lastService.date : '~'),
+          stage: (a) => ['Gilt', 'Open', 'Served', 'Lactating'].indexOf(A(a).status) + ':' + (A(a).statusDate || ''), group: (a) => (A(a).lastService ? mgroup(A(a).lastService.date) : '~'), entry: null,
+        }[o.sort];
+        if (key) list = list.slice().sort((x, y) => U.natCmp(key(x), key(y)) || U.natCmp(x.id, y.id));
+        return list;
+      };
+      ui().modal({ title: 'Sow card', width: 460, body, buttons: [
+        { label: 'Preview', primary: true, onClick: () => { const list = build(); if (!list.length) { ui().toast('No sows to print.'); return true; } ui().printPreview(`Sow cards (${list.length})`, h('div.cards' + (o.layout === 'half' ? '.half' : ''), list.slice(0, 500).map((a) => printable(a, o)))); } },
+        { label: 'Print', cls: 'print-btn', onClick: () => { const list = build(); if (!list.length) return true; ui().printPreview(`Sow cards (${list.length})`, h('div.cards' + (o.layout === 'half' ? '.half' : ''), list.slice(0, 500).map((a) => printable(a, o)))); setTimeout(() => { document.body.classList.add('printing'); window.print(); setTimeout(() => document.body.classList.remove('printing'), 500); }, 300); } },
+        { label: 'Cancel' },
+      ] });
     }
+    function printable(a, o) {
+      if (!o.data) return h('div.sowcard', h('div.sc-head', h('span.sc-id', a.id)), h('div.sc-lines', Array.from({ length: 14 }, () => h('div.sc-line'))));
+      const card = o.layout === 'lt'
+        ? h('div.sowcard', h('div.sc-head', h('div', h('span.sc-id', a.id), ` Parity ${A(a).parity} · ${A(a).status}`)), S.reports.table(['Par', 'Served', 'Boar', 'Farrowed', 'BA', 'BD', 'Weaned', 'Weaned on'], S.entry.ltSummaryRows(a).map((x) => [x.par, U.fmt(x.svc), x.boar, U.fmt(x.farrow), x.ba, x.sb, x.weaned, U.fmt(x.wean)])))
+        : S.reports.sowCard(a);
+      if (!o.template) { const lines = card.querySelector('.sc-lines'); if (lines) lines.remove(); }
+      return card;
+    }
+
 
     function cell(label, value) { return h('div.sc2-cell', h('div.sc2-cl', label), h('div.sc2-cv', value || ' ')); }
     function renderCard() {

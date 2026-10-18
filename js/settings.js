@@ -51,8 +51,8 @@
             h('tbody', s.vaccinations.map((v, i) => h('tr',
               h('td', h('input', { type: 'checkbox', checked: v.active, onchange: (e) => { v.active = e.target.checked; } })),
               h('td', h('input', { value: v.name, onchange: (e) => { v.name = e.target.value; } })),
-              h('td', ui().select('vt-' + i, [['served', 'Served sows'], ['lactating', 'Lactating sows'], ['open', 'Weaned / open sows'], ['gilt', 'Gilts']], v.target, { onchange: (e) => { v.target = e.target.value; v.ref = { served: 'service', lactating: 'farrow', open: 'wean', gilt: 'birth' }[v.target]; render(); } })),
-              h('td', { class: 'ref' }, { service: 'service', farrow: 'farrowing', wean: 'weaning', birth: 'birth' }[v.ref]),
+              h('td', ui().select('vt-' + i, [['served', 'Served sows'], ['lactating', 'Lactating sows'], ['open', 'Weaned / open sows'], ['gilt', 'Gilts'], ['boar', 'Boars (repeat)']], v.target, { onchange: (e) => { v.target = e.target.value; v.ref = { served: 'service', lactating: 'farrow', open: 'wean', gilt: 'birth', boar: 'repeat' }[v.target]; render(); } })),
+              h('td', { class: 'ref' }, { service: 'service', farrow: 'farrowing', wean: 'weaning', birth: 'birth', repeat: 'last dose / entry' }[v.ref]),
               h('td', h('input', { type: 'number', value: v.day, style: { width: '70px' }, onchange: (e) => { v.day = +e.target.value; } })),
               h('td', h('button.wbtn.sm', { type: 'button', onclick: () => { s.vaccinations.splice(i, 1); render(); } }, 'Remove'))))));
           host.append(t, h('button.wbtn', { type: 'button', onclick: () => { s.vaccinations.push({ id: U.uid('v'), name: 'New vaccination', target: 'served', ref: 'service', day: 90, active: true }); render(); } }, 'Add vaccination'),
@@ -74,11 +74,13 @@
           s.demo ? h('p.demo-note', 'The herd on file is EXAMPLE data. Clear it before entering your own animals.') : null,
           h('div.btn-col',
             h('button.wbtn', { type: 'button', onclick: () => ui().saveFile(`swineos-backup-${U.today()}.json`, S.store.exportJSON(), 'application/json') }, 'Download backup'),
-            h('label.wbtn.file', 'Restore backup…', h('input', { type: 'file', accept: '.json,application/json', onchange: (e) => restore(e.target.files[0], prog) })),
+            h('label.wbtn.file.big', 'Import PigWIN backup (.BDR)…', h('input', { type: 'file', accept: '.bdr,.BDR,.zip', onchange: (e) => importPigwin(e.target.files[0], prog) })),
+            h('label.wbtn.file', 'Restore backup…', h('input', { type: 'file', accept: '.json,application/json,.bdr,.BDR', onchange: (e) => restore(e.target.files[0], prog) })),
             h('label.wbtn.file', 'Import animals from CSV…', h('input', { type: 'file', accept: '.csv,text/csv', onchange: (e) => importCsv(e.target.files[0], prog) })),
             h('button.wbtn', { type: 'button', onclick: () => loadDemo(prog) }, 'Load example herd'),
             h('button.wbtn.danger', { type: 'button', onclick: () => clearAll(prog) }, 'Clear all records')),
           prog,
+          h('p.hint', 'Moving from PigWIN or PigLITTER: make a farm backup there (PigMAIN → Backup farm data) and import the .BDR file here. All sows, boars and their history are loaded.'),
           h('p.hint', 'CSV import columns: ID, Sex (F/M), Birth date, Arrival date, Entry date, Parity, Breed, Location. Dates as YYYY-MM-DD or M/D/YYYY.'));
       },
     };
@@ -97,8 +99,38 @@
 
   function progress(el) { return (d, t) => { el.textContent = `Saving ${d} of ${t}…`; if (d === t) el.textContent = 'Done.'; }; }
 
+  async function importPigwin(file, prog) {
+    if (!file) return;
+    let res;
+    try {
+      res = await S.pigwin.importBDR(await file.arrayBuffer(), file.name, (msg) => { prog.textContent = msg; });
+    } catch (e) {
+      prog.textContent = '';
+      ui().alertBox('Import failed', (e && e.message) || String(e));
+      return;
+    }
+    prog.textContent = '';
+    const st = res.stats;
+    const first = res.animals.flatMap((a) => a.events.map((e) => e.date)).sort()[0];
+    const ok = await ui().confirmBox('Import PigWIN backup',
+      `${res.settings.farmNumber || ''} ${res.settings.farmName || ''}\n\n${st.animals} animals (${st.active} active), ${st.events} events, from ${U.fmt(first)}.\n\nThis replaces all records now in SwineOS. Your code lists are kept and the backup's reasons and causes are added to them.`, 'Import');
+    if (!ok) return;
+    const cur = S.store.settings;
+    const lists = { ...cur.lists };
+    for (const [k, v] of Object.entries(res.settings.lists)) lists[k] = [...new Set([...(cur.lists[k] || []), ...v])];
+    const settings = { ...cur, farmName: res.settings.farmName || cur.farmName, farmNumber: res.settings.farmNumber || cur.farmNumber, gestationLength: res.settings.gestationLength || cur.gestationLength, lists, demo: false };
+    await S.store.replaceAll(res.animals, settings, progress(prog));
+    S.model.resetCache();
+    S.store.log(`Imported PigWIN backup ${file.name}: ${st.animals} animals, ${st.events} events`);
+    ui().toast(`Imported ${st.animals} animals from PigWIN.`, 'ok');
+    U.$$('.modal-back').forEach((m) => m.remove());
+    S.app.home();
+  }
+
   async function restore(file, prog) {
     if (!file) return;
+    const head = new Uint8Array(await file.slice(0, 2).arrayBuffer());
+    if (head[0] === 0x50 && head[1] === 0x4b) { importPigwin(file, prog); return; } // a zip: PigWIN .BDR
     let data;
     try { data = JSON.parse(await file.text()); } catch (e) { ui().alertBox('Restore failed', 'This file is not a SwineOS backup (it is not valid JSON).'); return; }
     if (!data || !Array.isArray(data.animals)) { ui().alertBox('Restore failed', 'This file is not a SwineOS backup (no animals found).'); return; }
@@ -163,5 +195,5 @@
     S.app.home();
   }
 
-  S.settingsUI = { open, loadDemo, restore };
+  S.settingsUI = { open, loadDemo, restore, importPigwin };
 })(window.SOS);

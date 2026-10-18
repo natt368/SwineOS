@@ -18,7 +18,7 @@
       rerenderFn = rerender || null;
       window.scrollTo(0, 0);
     },
-    home() { app.mount(homeScreen(), () => app.home()); location.hash === '' || history.replaceState(null, '', location.pathname); },
+    home() { app.mount(S.mainMenu.home(), () => app.home()); location.hash === '' || history.replaceState(null, '', location.pathname); },
     reports(section = 'sows') { app.mount(S.reports.menu(section), () => app.reports(section)); },
     entry() { const w = S.entry.open(); app.mount(w, null); },
     show(fn) { const w = fn(); if (w) app.mount(w, null); },
@@ -31,60 +31,12 @@
     help,
   };
 
-  function kpiStrip() {
-    const animals = S.store.animals();
-    const fem = animals.filter((a) => a.sex === 'F' && !A(a).removed);
-    const c = (s) => fem.filter((a) => A(a).status === s).length;
-    const gest = S.store.settings.gestationLength;
-    const today = U.today();
-    const due7 = fem.filter((a) => A(a).status === 'Served' && U.diff(U.addDays(A(a).lastService.date, gest), today) <= 7).length;
-    const wean = fem.filter((a) => A(a).lactating && U.diff(today, A(a).currentLitter.farrowDate) >= S.store.settings.targetLactation).length;
-    const pig = U.sum(fem.filter((a) => A(a).lactating).map((a) => A(a).piglets));
-    const tile = (label, v, onclick) => h('button.kpi', { type: 'button', onclick }, h('span.kv', String(v)), h('span.kl', label));
-    return h('div.kpis',
-      tile('Breeding females', fem.length, () => app.entry()),
-      tile('Gilts', c('Gilt'), () => app.entry()),
-      tile('Open', c('Open'), () => app.entry()),
-      tile('Served', c('Served'), () => app.entry()),
-      tile('Lactating', c('Lactating'), () => app.entry()),
-      tile('Piglets on sows', pig, () => app.entry()),
-      tile('Due to farrow ≤ 7 d', due7, () => S.actionLists.open()),
-      tile('Ready to wean', wean, () => S.actionLists.open()));
-  }
-
-  function homeScreen() {
-    const st = S.store.settings;
-    const win = h('section.win.home-win');
-    win.appendChild(h('div.win-title', h('span.win-name', `SwineOS  -  [${st.farmNumber} ${st.farmName}]`)));
-    const tb = h('div.toolbar.home-tb');
-    [['entry', 'Sow data entry', () => app.entry()], ['reports', 'Reports', () => app.reports()], ['actions', 'Action lists', () => S.actionLists.open()], '|',
-      ['settings', 'Settings', () => S.settingsUI.open('farm')], ['backup', 'Backup', () => S.settingsUI.open('data')], '|', ['help', 'Help', () => help('home')]]
-      .forEach((t) => { if (t === '|') tb.appendChild(h('span.tb-sep')); else tb.appendChild(h('button.tb-btn', { type: 'button', onclick: t[2] }, ui().icon(t[0]), h('span', t[1]))); });
-    win.appendChild(tb);
-    const today = U.today();
-    win.appendChild(h('div.home-body',
-      h('div.home-hero',
-        h('div.hero-pig', { html: ui().ICONS.sow }),
-        h('div.hero-logo', h('span.l1', 'Swine'), h('span.l2', 'OS'), h('sup', '®')),
-        h('div.hero-farm', `${st.farmNumber}  ${st.farmName}`),
-        h('div.hero-date', `${U.weekday(today)} ${U.fmt(today)}  ·  week ${U.isoWeek(today).slice(6)}`)),
-      h('div.home-band', kpiStrip()),
-      h('div.home-nav',
-        h('button.navy-btn.big', { type: 'button', onclick: () => app.entry() }, 'Sow data entry'),
-        h('button.navy-btn.big', { type: 'button', onclick: () => app.reports('sows') }, 'Sow / gilt reports'),
-        h('button.navy-btn.big', { type: 'button', onclick: () => app.show(S.reports.herdPerformance) }, 'Herd performance'),
-        h('button.navy-btn.big', { type: 'button', onclick: () => S.actionLists.open() }, 'Action lists'),
-        h('button.navy-btn.big', { type: 'button', onclick: () => S.sowCard.open() }, 'Sow cards'),
-        h('button.navy-btn.big', { type: 'button', onclick: () => app.reports('piglets') }, 'Piglet reports'),
-        h('button.navy-btn.big', { type: 'button', onclick: () => app.reports('boars') }, 'Boar reports')),
-      h('div.home-foot', `Records stored ${S.store.state.backend === 'cloud' ? 'in the shared online database' : 'in this browser – download a backup regularly'}.`)));
-    return win;
-  }
-
   const HELP = {
     home: [
       ['Getting started', 'Use Sow data entry to record events in the barn: matings, pregnancy checks, farrowings, piglet deaths, fostering and weaning. Reports and Action lists are calculated from those records.'],
-      ['Entering a new animal', 'In Sow data entry, click the Entry tab at the bottom, type the new ID and press Enter. Fill in birth, arrival and herd entry dates.'],
+      ['Entering a new animal', 'In Sows / Boars (or Gilt pool for gilts), click the Entry tab at the bottom, type the new ID and press Enter. Fill in the Herd entry details: arrival and herd entry dates, origin, genetics and so on.'],
+      ['Action list entry', 'Enter results for a whole list of sows at once: pick the tab (Farrowing, Weaning, Mating …), type the numbers in the rows and press Enter on the toolbar.'],
+      ['Moving from PigWIN', 'Open More options → Import PigWIN backup and choose your .BDR backup file. All sows, boars and their history are loaded.'],
       ['Backups', S.store && S.store.state.backend === 'cloud' ? 'Records are kept in the shared online database. You can still download a backup file under Settings → Backup & data.' : 'Records are kept in this web browser. Download a backup file regularly under Settings → Backup & data, and restore it on another computer if needed.'],
     ],
     entry: [
@@ -127,6 +79,8 @@
     if (window.claude) document.documentElement.classList.add('in-artifact');
     root.innerHTML = '<div class="loading">Loading herd records…</div>';
     await S.store.init();
+    S.mainMenu.applyScale();
+    S.mainMenu.applyPrint();
     let lastCount = -1;
     S.store.onChange(() => {
       S.model.resetCache();

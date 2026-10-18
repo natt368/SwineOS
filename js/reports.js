@@ -73,20 +73,21 @@
   /* ================= HERD PERFORMANCE ================= */
   function herdPerformance() {
     const today = U.today();
-    const p = { tab: 'K', option: 'Seasonal', cols: 1, len: 1, unit: 'Year(s)', end: today, begin: U.addDays(U.addMonths(today, -12), 1), parity: '' };
+    const p = { tab: 'K', option: 'Seasonal', cols: 1, len: 1, unit: 'Year(s)', end: today, begin: U.addDays(U.addMonths(today, -12), 1), parity: '', view: 'table', series: ['tb', 'ba', 'weanLitter', ''] };
     let last = null;
     const win = ui().appWindow({ title: 'Herd performance', cls: 'report-win hp-win', toolbar: [
       { icon: 'update', label: 'Update', onClick: () => run() },
       { icon: 'info', label: 'Cell info', onClick: () => cellInfo() },
-      { icon: 'settings', label: 'Settings', onClick: () => S.settingsUI.open('targets') },
+      { icon: 'settings', label: 'Settings', onClick: () => hpSettings() },
       '|',
-      { icon: 'graph', label: 'Graph', onClick: () => graph() },
+      { icon: 'graph', label: 'Graph', id: 'hp-view', onClick: () => { p.view = p.view === 'table' ? 'graph' : 'table'; run(); } },
       '|',
-      { icon: 'print', label: 'Print', onClick: () => last && ui().printPreview('Herd performance', last.node.cloneNode(true)) },
+      { icon: 'print', label: 'Print', onClick: () => last && ui().printPreview('Herd performance', (p.view === 'graph' ? body.firstChild : last.node).cloneNode(true)) },
       { icon: 'export', label: 'Export', onClick: () => last && ui().saveFile('herd-performance.csv', U.csv(last.csv), 'text/csv') },
       '|',
       { icon: 'close', label: 'Close', onClick: () => S.app.reports() },
     ] });
+    const seriesBar = h('div.hp-series');
     const head = h('div.rep-head', h('div.rep-logo', ui().icon('sow'), h('span', 'Swine', h('b', 'OS'))), h('div.rep-titles', h('div.rep-title', 'Herd performance'), h('div.rep-period'), h('div.rep-sub', 'Seasonal trends in Key indicators')));
     const body = h('div.rep-body');
     const note = h('div.rep-note', h('i.shade-key'), 'Results in shaded area may be biased by incomplete data for some breeding females');
@@ -102,7 +103,7 @@
       ui().field('Detailed selection (parity)', ui().input('hp-par', '', { placeholder: 'all, or 1 / 2-5 / 6+', onchange: (e) => { p.parity = e.target.value; run(); } })),
       h('div.quick', [['13 × 4 wk', () => { p.option = 'Seasonal'; p.cols = 13; p.len = 4; p.unit = 'Week(s)'; }], ['12 months', () => { p.option = 'Seasonal'; p.cols = 12; p.len = 1; p.unit = 'Month(s)'; }], ['4 quarters', () => { p.option = 'Seasonal'; p.cols = 4; p.len = 1; p.unit = 'Quarter(s)'; }], ['Last year', () => { p.option = 'Seasonal'; p.cols = 1; p.len = 1; p.unit = 'Year(s)'; }]]
         .map(([l, f]) => h('button.wbtn.sm', { type: 'button', onclick: () => { f(); U.$('#hp-opt').value = p.option; U.$('#hp-cols').value = p.cols; U.$('#hp-len').value = p.len; U.$('#hp-unit').value = p.unit; run(); } }, l))));
-    win.append(head, body, note, tabs, panel);
+    win.append(head, body, seriesBar, note, tabs, panel);
 
     function run() {
       if (p.option === 'Period') { p.periods = [[p.begin, p.end]]; }
@@ -116,7 +117,7 @@
       head.querySelector('.rep-period').textContent = `Analysis period from ${U.fmt(p.begin)} to ${U.fmt(p.end)} [ ${U.diff(p.end, p.begin) + 1} Day(s) ]` + (p.parity ? `  ·  parity ${p.parity}` : '');
       head.querySelector('.rep-sub').textContent = (p.option === 'Seasonal' ? 'Seasonal trends in ' : 'Period results – ') + (S.calc.TABS.find((t) => t[0] === p.tab)[1]) + ' indicators';
       U.$$('.rtab', tabs).forEach((b) => b.classList.toggle('active', b.dataset.k === p.tab));
-      const metrics = S.calc.METRICS.filter((m) => p.tab === 'A' || m.tabs.includes(p.tab));
+      const metrics = S.calc.metricsFor(p.tab);
       const cols = stats.map((x) => x);
       if (total) cols.push(total);
       const tgt = S.store.settings.targets;
@@ -137,16 +138,56 @@
               cls += good ? ' good' : ' bad';
             }
             if (i === stats.length) cls += ' tot';
-            return h('td', { class: cls.trim() || null, 'data-i': i, onclick: (ev) => selectCell(m, i, ev.currentTarget) }, m.f(v));
+            return h('td', { class: cls.trim() || null, 'data-i': i, onclick: (ev) => selectCell(m, i, ev.currentTarget) }, sh && m.hideShaded ? '' : m.f(v));
           }),
           h('td.tgt', m.target && tgt[m.target] !== undefined ? String(tgt[m.target]) : '')))));
       body.innerHTML = '';
-      body.appendChild(h('div.hp-scroll', t));
+      const vb = U.$('#hp-view', win); if (vb) vb.querySelector('span:last-child').textContent = p.view === 'table' ? 'Graph' : 'Table';
+      seriesBar.hidden = p.view !== 'graph';
+      if (!metrics.length) body.appendChild(h('p.msg.hp-empty', 'No indicators chosen for this tab yet. Press Settings to pick the indicators for Custom 1 and Custom 2.'));
+      else if (p.view === 'graph') body.appendChild(graphView(cols.slice(0, stats.length)));
+      else body.appendChild(h('div.hp-scroll', t));
       note.hidden = !shaded;
       last = {
         node: t, metrics, stats: cols,
         csv: [['Indicator', ...cols.map((x) => `${U.fmt(x.begin)} - ${U.fmt(x.end)}`), 'Target'], ...metrics.map((m) => [m.label, ...cols.map((x) => m.f(m.v(x))), m.target ? tgt[m.target] : ''])],
       };
+    }
+    const COLORS = ['#e00000', '#00c000', '#0000ff', '#007000'];
+    function graphView(st) {
+      const all = S.calc.METRICS;
+      seriesBar.innerHTML = '';
+      p.series.forEach((id, k) => {
+        seriesBar.appendChild(h('label.hp-ser', h('i', { style: { background: COLORS[k] } }),
+          ui().select(null, [['', '']].concat(all.map((m) => [m.id, m.label])), id, { onchange: (e) => { p.series[k] = e.target.value; run(); } })));
+      });
+      const ser = p.series.map((id, k) => ({ id, k })).filter((x) => x.id).map(({ id, k }) => { const m = all.find((y) => y.id === id); return { name: m.label, color: COLORS[k], values: st.map((x) => m.v(x)) }; });
+      return h('div.hp-graph', ui().lineChart({ labels: st.map((x) => st.length === 1 ? `${U.fmt(x.begin)} ${U.fmt(x.end)}` : U.fmt(x.end)), series: ser, bars: true, yLabel: 'Number / Percentage', width: 1100, height: 420 }));
+    }
+    function hpSettings() {
+      const sets = JSON.parse(JSON.stringify(S.store.settings.hpSets || {}));
+      ['K', 'C1', 'C2'].forEach((k) => { if (!sets[k] || !sets[k].length) sets[k] = k === 'K' ? S.calc.METRICS.filter((m) => m.tabs.includes('K')).map((m) => m.id) : []; });
+      const sorted = S.calc.METRICS.slice().sort((a, b) => a.label.localeCompare(b.label));
+      let cur = sorted[0].id;
+      const boxes = { K: h('input', { type: 'checkbox' }), C1: h('input', { type: 'checkbox' }), C2: h('input', { type: 'checkbox' }) };
+      const sync = () => Object.entries(boxes).forEach(([k, b]) => { b.checked = sets[k].includes(cur); });
+      Object.entries(boxes).forEach(([k, b]) => b.addEventListener('change', () => { sets[k] = b.checked ? [...new Set([...sets[k], cur])] : sets[k].filter((x) => x !== cur); renderList(); }));
+      const list = h('div.hp-setlist');
+      const renderList = () => {
+        list.innerHTML = '';
+        sorted.forEach((m) => {
+          const tags = ['K', 'C1', 'C2'].filter((k) => sets[k].includes(m.id)).map((k) => ({ K: 'Key', C1: 'C1', C2: 'C2' })[k]).join(' ');
+          list.appendChild(h('div.hp-setrow' + (m.id === cur ? '.sel' : ''), { onclick: () => { cur = m.id; sync(); renderList(); } }, h('span', m.label), h('span.tags', tags)));
+        });
+      };
+      renderList(); sync();
+      ui().modal({ title: 'Settings', width: 560, body: h('div', h('div.hp-sethead', 'Description'), list,
+        h('div.hp-setboxes', h('label', boxes.K, ' Key'), h('label', boxes.C1, ' Custom 1'), h('label', boxes.C2, ' Custom 2')),
+        h('p.hint', 'Click an indicator, then tick the tabs it should appear on.')), buttons: [
+        { label: 'Targets…', onClick: () => { S.settingsUI.open('targets'); return true; } },
+        { label: 'OK', primary: true, right: true, onClick: async () => { await S.store.saveSettings({ ...S.store.settings, hpSets: sets }); run(); } },
+        { label: 'Cancel' },
+      ] });
     }
     let selCell = null;
     function selectCell(m, i, td) {
@@ -568,10 +609,19 @@
   function dueVaccinations(b, e) {
     const out = [];
     const vac = (S.store.settings.vaccinations || []).filter((v) => v.active);
-    S.store.animals().filter((a) => a.sex === 'F' && !A(a).removed).forEach((a) => {
+    S.store.animals().filter((a) => !A(a).removed).forEach((a) => {
       const r = A(a);
       vac.forEach((v) => {
         let ref = null;
+        if ((a.sex === 'M') !== (v.target === 'boar')) return;
+        if (v.target === 'boar') {
+          const lastV = r.events.filter((x) => x.type === 'vaccinate' && x.vaccine === v.name).map((x) => x.date).pop();
+          const refB = lastV || r.entryDate || a.arrivalDate;
+          if (!refB) return;
+          const dueB = U.addDays(refB, +v.day);
+          if (U.inRange(dueB, b, e) || (dueB < b && U.diff(b, dueB) <= 30)) out.push({ a, r, v, due: dueB });
+          return;
+        }
         if (v.target === 'served' && r.status === 'Served' && v.ref === 'service') ref = r.lastService.date;
         if (v.target === 'lactating' && r.status === 'Lactating' && v.ref === 'farrow') ref = r.currentLitter.farrowDate;
         if (v.target === 'gilt' && r.status === 'Gilt' && v.ref === 'birth') ref = a.birthDate;
@@ -584,9 +634,11 @@
     });
     return out.sort((x, y) => (x.due < y.due ? -1 : x.due > y.due ? 1 : U.natCmp(x.a.id, y.a.id)));
   }
-  function vaccinations() {
-    return reportWindow({ title: 'Vaccinations', subtitle: 'Vaccinations and periodical treatments due (set the schedule under Settings)', defaults: { begin: U.today(), end: U.addDays(U.today(), 7) }, build: (p) => {
-      const rows = dueVaccinations(p.begin, p.end);
+  function vaccinations(opts = {}) {
+    let shown = [];
+    return reportWindow({ title: opts.boars ? 'Boar vaccinations' : opts.entry ? 'Vaccinations – data entry' : 'Vaccinations', subtitle: 'Vaccinations and periodical treatments due (set the schedule under Settings → Vaccinations)', defaults: { begin: U.today(), end: U.addDays(U.today(), 7) }, build: (p) => {
+      const rows = dueVaccinations(p.begin, p.end).filter((x) => (opts.boars ? x.a.sex === 'M' : opts.entry ? true : x.a.sex === 'F'));
+      shown = rows;
       const g = ui().grid({ rows, cls: 'rep-grid', columns: [
         { label: 'Due', value: (x) => U.fmt(x.due), sort: (x) => x.due }, { label: 'Vaccine / action', value: (x) => x.v.name }, { label: 'Sow', value: (x) => x.a.id },
         { label: 'Par', num: true, value: (x) => x.r.parity }, { label: 'Status', value: (x) => x.r.status }, { label: 'Location', value: (x) => x.r.location || '' },
@@ -600,7 +652,22 @@
         } }, 'Done today'), value: () => '' },
       ] });
       const sum = {}; rows.forEach((x) => { sum[x.v.name] = (sum[x.v.name] || 0) + 1; });
+      void shown;
       return { node: h('div', h('div.vsum', rows.length ? Object.entries(sum).map(([k, v]) => `${k}: ${v}`).join(' · ') : 'Nothing due in this period.'), g), csv: [['Due', 'Vaccine', 'Sow', 'Parity', 'Status', 'Location'], ...rows.map((x) => [U.fmt(x.due), x.v.name, x.a.id, x.r.parity, x.r.status, x.r.location || ''])] };
+    }, extra: (panel, p, run) => {
+      panel.appendChild(h('button.wbtn', { type: 'button', onclick: async () => {
+        if (!shown.length) { ui().toast('Nothing due in this period.'); return; }
+        const ok = await ui().confirmBox('Record vaccinations', `Record ${shown.length} vaccinations as done today?`, 'Record all');
+        if (!ok) return;
+        for (const x of shown) {
+          const cur = S.store.get(x.a.uid);
+          const seq = (cur.events || []).reduce((m, e) => Math.max(m, e.seq || 0), 0) + 1;
+          // eslint-disable-next-line no-await-in-loop
+          await S.store.saveAnimal({ ...cur, events: [...cur.events, { type: 'vaccinate', date: U.today(), vaccine: x.v.name, eid: U.uid('e'), seq }] });
+        }
+        ui().toast(`${shown.length} vaccinations recorded.`, 'ok');
+        run();
+      } }, 'Record all shown as done today'));
     } });
   }
 
@@ -834,6 +901,146 @@
     } });
   }
 
+  /* ================= PIGLET REPORTS ================= */
+  function fosterManagement() {
+    return reportWindow({ title: 'Foster management', subtitle: 'Cross-fostering for litters farrowed in the period', build: (p) => {
+      const L = littersIn(p);
+      const bins = { 'No fostering': [], 'Received pigs': [], 'Gave pigs': [] };
+      L.forEach((l) => { const n = l.fosterIn - l.fosterOut; (n > 0 ? bins['Received pigs'] : n < 0 ? bins['Gave pigs'] : bins['No fostering']).push(l); });
+      const rows = Object.entries(bins).map(([k, ls]) => [k, ls.length, n1(U.pct(ls.length, L.length)), n1(U.avg(ls.map((l) => l.liveBorn))), n1(U.avg(ls.map((l) => l.fosterIn - l.fosterOut))), n1(U.avg(ls.filter((l) => l.weanDate).map((l) => l.weaned)))]);
+      const t = table(['Group', 'Litters', '%', 'Born alive', 'Net fostered', 'Weaned'], rows);
+      const bySize = byParity(L, (l) => (l.liveBorn <= 10 ? '≤ 10' : l.liveBorn <= 13 ? '11-13' : l.liveBorn <= 16 ? '14-16' : '17+'), ['≤ 10', '11-13', '14-16', '17+']);
+      const t2 = table(['Born alive', 'Litters', 'Fostered on / litter', 'Fostered off / litter', 'Weaned'], Object.entries(bySize).filter(([, v]) => v.length).map(([k, ls]) => [k, ls.length, n2(U.avg(ls.map((l) => l.fosterIn))), n2(U.avg(ls.map((l) => l.fosterOut))), n1(U.avg(ls.filter((l) => l.weanDate).map((l) => l.weaned)))]));
+      return { node: h('div', t, h('h4', 'By litter size at birth'), t2), csv: t.csv };
+    } });
+  }
+  function litterDistribution() {
+    return reportWindow({ title: 'Litter distribution', subtitle: 'How many litters of each size were born and weaned in the period', build: (p) => {
+      const L = littersIn(p); const W = weanedIn(p);
+      const dist = (arr, f) => { const d = {}; arr.forEach((l) => { const k = Math.min(f(l), 22); d[k] = (d[k] || 0) + 1; }); return d; };
+      const ba = dist(L, (l) => l.liveBorn); const tb = dist(L, (l) => l.totalBorn); const wn = dist(W, (l) => l.weaned);
+      const keys = [...new Set([...Object.keys(ba), ...Object.keys(tb), ...Object.keys(wn)].map(Number))].sort((a, b) => a - b);
+      const rows = keys.map((k) => [k === 22 ? '22+' : k, tb[k] || '', n1(U.pct(tb[k] || 0, L.length)), ba[k] || '', n1(U.pct(ba[k] || 0, L.length)), wn[k] || '', n1(U.pct(wn[k] || 0, W.length))]);
+      const t = table(['Pigs', 'Total born', '%', 'Born alive', '%', 'Weaned', '%'], rows);
+      return { node: h('div', h('div.vsum', `${L.length} litters born · ${W.length} litters weaned`), t), csv: t.csv,
+        chart: () => ui().lineChart({ labels: keys.map(String), series: [{ name: 'Born alive', values: keys.map((k) => ba[k] || 0) }, { name: 'Weaned', values: keys.map((k) => wn[k] || 0) }], bars: true }) };
+    } });
+  }
+  function progenySelection() {
+    return reportWindow({ title: 'Progeny selection', subtitle: 'Best litters farrowed in the period, for picking replacement gilts', build: (p) => {
+      const L = littersIn(p).filter((l) => !l.r.removed);
+      const rows = L.map((l) => {
+        const lt = l.r.litters; const avgBA = U.avg(lt.map((x) => x.liveBorn)); const avgW = U.avg(lt.filter((x) => x.weanDate).map((x) => x.weaned));
+        const idx = 0.5 * l.liveBorn + 0.5 * (l.weanDate ? l.weaned : l.liveBorn) + 0.5 * avgBA + 0.5 * (Number.isFinite(avgW) ? avgW : avgBA);
+        return { l, avgBA, avgW, idx };
+      }).sort((a, b) => b.idx - a.idx);
+      const g = ui().grid({ rows, cls: 'rep-grid', columns: [
+        { label: 'Sow', value: (x) => x.l.sowId }, { label: 'Par', num: true, value: (x) => x.l.parity }, { label: 'Farrowed', value: (x) => U.fmt(x.l.farrowDate), sort: (x) => x.l.farrowDate },
+        { label: 'Boar', value: (x) => x.l.boar || '' }, { label: 'BA', num: true, value: (x) => x.l.liveBorn }, { label: 'Weaned', num: true, value: (x) => (x.l.weanDate ? x.l.weaned : '') },
+        { label: 'Sow avg BA', num: true, value: (x) => +n1(x.avgBA) }, { label: 'Sow avg weaned', num: true, value: (x) => +n1(x.avgW) || '' }, { label: 'Index', num: true, value: (x) => +n1(x.idx) },
+      ], onRowDblClick: (x) => S.app.openSow(x.l.sow) });
+      return { node: h('div', h('div.vsum', 'Index = half of (born alive + weaned in this litter + sow lifetime averages). Highest first.'), g), csv: [['Sow', 'Parity', 'Farrowed', 'BA', 'Weaned', 'Index'], ...rows.map((x) => [x.l.sowId, x.l.parity, x.l.farrowDate, x.l.liveBorn, x.l.weanDate ? x.l.weaned : '', n1(x.idx)])] };
+    } });
+  }
+  function deathCauses(W) {
+    const causes = {};
+    W.forEach((l) => { Object.entries(l.deathsByCause).forEach(([c, n]) => { causes[c] = (causes[c] || 0) + n; }); if (l.lostAtWean) causes['Not recorded (difference at weaning)'] = (causes['Not recorded (difference at weaning)'] || 0) + l.lostAtWean; });
+    return causes;
+  }
+  function mortalityReasons() {
+    return reportWindow({ title: 'Mortality reasons', subtitle: 'Piglet deaths by cause, litters weaned in the period', build: (p) => {
+      const W = weanedIn(p); const c = deathCauses(W); const tot = U.sum(Object.values(c));
+      const rows = Object.entries(c).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, v, n1(U.pct(v, tot)), n2(v / (W.length || 1))]);
+      const t = table(['Cause', 'Deaths', '% of deaths', 'Per litter'], rows);
+      return { node: h('div', h('div.vsum', `${W.length} litters weaned · ${tot} piglet deaths (net)`), t), csv: t.csv, chart: () => ui().lineChart({ labels: rows.map((r) => r[0]), series: [{ name: 'Deaths', values: rows.map((r) => r[1]) }], bars: true }) };
+    } });
+  }
+  function seasonalTrends() {
+    return reportWindow({ title: 'Seasonal trends', subtitle: 'Pre-weaning mortality by month of weaning', defaults: { begin: U.addDays(U.addMonths(U.today(), -24), 1) }, build: (p) => {
+      const W = weanedIn(p); const g = {};
+      W.forEach((l) => { const k = l.weanDate.slice(0, 7); (g[k] = g[k] || []).push(l); });
+      const keys = Object.keys(g).sort();
+      const rows = keys.map((k) => { const ls = g[k]; const start = U.sum(ls.map((l) => l.liveBorn + l.fosterIn - l.fosterOut)); const d = U.sum(ls.map((l) => l.deaths + (l.lostAtWean || 0))); return [k, ls.length, start, d, U.sum(ls.map((l) => l.weaned)), n1(U.pct(d, start))]; });
+      const t = table(['Month', 'Litters', 'Born alive + net fostered', 'Deaths', 'Weaned', 'Mortality %'], rows);
+      return { node: h('div', ui().lineChart({ labels: keys, series: [{ name: 'Mortality %', values: rows.map((r) => +r[5]) }], yLabel: 'Mortality %', target: S.store.settings.targets.pwm }), t), csv: t.csv };
+    } });
+  }
+  function ageAtDeath() {
+    return reportWindow({ title: 'Age at death', subtitle: 'Recorded piglet deaths by piglet age (deaths dated in the period)', build: (p) => {
+      const keys = ['0-1 d', '2-3 d', '4-7 d', '8-14 d', '15-21 d', '22+ d']; const age = Object.fromEntries(keys.map((k) => [k, 0])); const byCause = {};
+      S.store.animals().forEach((a) => { const r = A(a); r.events.forEach((e) => {
+        if (e.type !== 'pigdeath' || !U.inRange(e.date, p.begin, p.end)) return;
+        const l = [...r.litters].reverse().find((x) => x.farrowDate <= e.date); if (!l) return;
+        const d = U.diff(e.date, l.farrowDate); const k = d <= 1 ? keys[0] : d <= 3 ? keys[1] : d <= 7 ? keys[2] : d <= 14 ? keys[3] : d <= 21 ? keys[4] : keys[5];
+        const n = Number(e.count) || 0; age[k] += n; const c = e.cause || 'Unknown'; byCause[c] = byCause[c] || Object.fromEntries(keys.map((x) => [x, 0])); byCause[c][k] += n;
+      }); });
+      const tot = U.sum(Object.values(age));
+      const t = table(['Age', 'Deaths', '%'], keys.map((k) => [k, age[k], n1(U.pct(age[k], tot))]));
+      const t2 = table(['Cause', ...keys, 'Total'], Object.entries(byCause).map(([c, v]) => [c, ...keys.map((k) => v[k] || ''), U.sum(Object.values(v))]));
+      return { node: h('div', tot ? null : h('div.vsum', 'No individual piglet deaths were recorded in this period. Deaths counted as the difference at weaning have no age.'), t, h('h4', 'By cause'), t2), csv: t.csv, chart: () => ui().lineChart({ labels: keys, series: [{ name: 'Deaths', values: keys.map((k) => age[k]) }], bars: true }) };
+    } });
+  }
+  function pigletParity() {
+    return reportWindow({ title: 'Piglet deaths by parity', subtitle: 'Pre-weaning mortality by sow parity, litters weaned in the period', build: (p) => {
+      const W = weanedIn(p); const g = byParity(W);
+      const rows = PAR_KEYS.filter((k) => g[k].length).map((k) => { const ls = g[k]; const start = U.sum(ls.map((l) => l.liveBorn + l.fosterIn - l.fosterOut)); const d = U.sum(ls.map((l) => l.deaths + (l.lostAtWean || 0))); return [k, ls.length, start, d, n1(U.pct(d, start)), n2(d / ls.length)]; });
+      const t = table(['Parity', 'Litters', 'Born alive + net fostered', 'Deaths', 'Mortality %', 'Deaths / litter'], rows);
+      return { node: t, csv: t.csv, chart: () => ui().lineChart({ labels: rows.map((r) => 'P' + r[0]), series: [{ name: 'Mortality %', values: rows.map((r) => +r[4]) }], bars: true }) };
+    } });
+  }
+
+  /* ================= BOAR REPORTS ================= */
+  function technicianPerformance() {
+    return reportWindow({ title: 'Technician performance', subtitle: 'Results of services by technician (services made in the period)', build: (p) => {
+      const sv = servicesIn(p);
+      const g = {}; sv.forEach((s) => { const t = s.tech || '(none)'; (g[t] = g[t] || []).push(s); });
+      const rows = Object.keys(g).sort(U.natCmp).map((t) => {
+        const ss = g[t]; const done = ss.filter((s) => !['pending', 'unknown'].includes(s.outcome));
+        const lit = ss.map((s) => s.r.litters.find((l) => l.service && l.service.date === s.date)).filter(Boolean);
+        return [t, ss.length, U.sum(ss.map((s) => s.matings)), done.length, n1(U.pct(done.filter((s) => s.outcome === 'farrow').length, done.length)), n1(U.pct(done.filter((s) => s.outcome === 'return' || s.outcome === 'neg').length, done.length)), lit.length, n1(U.avg(lit.map((l) => l.totalBorn))), n1(U.avg(lit.map((l) => l.liveBorn)))];
+      });
+      const t = table(['Technician', 'Services', 'Matings', 'Known outcome', 'Farrowing rate %', 'Returns %', 'Litters', 'Total born', 'Born alive'], rows);
+      return { node: t, csv: t.csv, shaded: sv.some((s) => s.outcome === 'pending'), chart: () => ui().lineChart({ labels: rows.map((r) => r[0]), series: [{ name: 'Farrowing rate %', values: rows.map((r) => +r[4]) }], bars: true, target: S.store.settings.targets.farrowRate }) };
+    } });
+  }
+  function boarCard() {
+    const c = { which: 'active', boar: '', len: 3, unit: 'Month(s)' };
+    return reportWindow({ title: 'Boar card', subtitle: 'One boar: details, matings and results', defaults: { begin: U.addDays(U.addMonths(U.today(), -3), 1) }, build: (p) => {
+      const boars = S.store.animals().filter((a) => a.sex === 'M' && (c.which === 'all' || (c.which === 'active') === !A(a).removed)).sort((x, y) => U.natCmp(x.id, y.id));
+      const sel = c.selEl;
+      if (sel) { const cur = c.boar; sel.innerHTML = ''; boars.forEach((b) => sel.appendChild(h('option', { value: b.id, selected: b.id === cur ? 'selected' : null }, b.id))); if (!boars.some((b) => b.id === cur)) c.boar = boars[0] ? boars[0].id : ''; sel.value = c.boar; }
+      const b = boars.find((x) => x.id === c.boar);
+      if (!b) return { node: h('div.no-data', 'No data present') };
+      const r = A(b);
+      const sv = S.calc.collect().services.filter((s) => s.boars.includes(b.id) && U.inRange(s.date, p.begin, p.end));
+      const done = sv.filter((s) => !['pending', 'unknown'].includes(s.outcome));
+      const lit = sv.map((s) => s.r.litters.find((l) => l.service && l.service.date === s.date)).filter(Boolean);
+      const info = h('div.details-sum',
+        h('div', h('b', 'Boar: '), b.id, b.name ? ` (${b.name})` : '', '  ·  ', h('b', 'Status: '), r.status, '  ·  ', h('b', 'Genetics: '), b.breed || '–', '  ·  ', h('b', 'Type: '), b.boarType || 'Live boar', b.blocked ? '  ·  BLOCKED' : ''),
+        h('div', h('b', 'Born: '), U.fmt(b.birthDate) || '–', '  ·  ', h('b', 'Arrived: '), U.fmt(b.arrivalDate) || '–', '  ·  ', h('b', 'Entered: '), U.fmt(r.entryDate) || '–', r.removed ? `  ·  Removed ${U.fmt(r.removedDate)} (${r.removalReason || r.status})` : ''),
+        h('div', h('b', 'In period: '), `${sv.length} services · ${new Set(sv.map((s) => s.sow.uid)).size} sows · farrowing rate ${n1(U.pct(done.filter((s) => s.outcome === 'farrow').length, done.length)) || '–'}% · ${lit.length} litters · TB ${n1(U.avg(lit.map((l) => l.totalBorn))) || '–'} · BA ${n1(U.avg(lit.map((l) => l.liveBorn))) || '–'}`));
+      const g = ui().grid({ rows: sv, cls: 'rep-grid', columns: [
+        { label: 'Date', value: (s) => U.fmt(s.date), sort: (s) => s.date }, { label: 'Sow', value: (s) => s.sow.id }, { label: 'Par', num: true, value: (s) => s.parity },
+        { label: 'Matings', num: true, value: (s) => s.matings }, { label: 'Technician', value: (s) => s.tech || '' }, { label: 'Outcome', value: (s) => ({ farrow: 'Farrowed', return: 'Returned', neg: 'Not pregnant', abort: 'Aborted', removed: 'Removed', pending: 'Pending', unknown: 'Unknown' })[s.outcome] || '' },
+        { label: 'BA', num: true, value: (s) => { const l = s.r.litters.find((x) => x.service && x.service.date === s.date); return l ? l.liveBorn : ''; } },
+      ], onRowDblClick: (s) => S.app.openSow(s.sow), emptyText: 'No matings with this boar in the period' });
+      return { node: h('div', info, g), csv: [['Date', 'Sow', 'Parity', 'Matings', 'Outcome'], ...sv.map((s) => [s.date, s.sow.id, s.parity, s.matings, s.outcome])] };
+    }, extra: (panel, p, run) => {
+      panel.prepend(h('div.bc-radio', ...[['all', 'All boars'], ['active', 'Active boars'], ['removed', 'Removed boars']].map(([k, l]) => h('label', h('input', { type: 'radio', name: 'bc-which', checked: k === 'active', onchange: () => { c.which = k; run(); } }), ' ', l))),
+        ui().field('Boar', (c.selEl = ui().select('bc-boar', [], '', { onchange: (e) => { c.boar = e.target.value; run(); } }))));
+    } });
+  }
+  function boarRemovals() {
+    return reportWindow({ title: 'Removals manager – boars', subtitle: 'Boars removed in the period', build: (p) => {
+      const rows = S.store.animals().filter((a) => a.sex === 'M' && A(a).removed && U.inRange(A(a).removedDate, p.begin, p.end)).map((a) => ({ a, r: A(a) }));
+      const g = ui().grid({ rows, cls: 'rep-grid', columns: [
+        { label: 'Boar', value: (x) => x.a.id }, { label: 'Removed', value: (x) => U.fmt(x.r.removedDate), sort: (x) => x.r.removedDate }, { label: 'Kind', value: (x) => x.r.status }, { label: 'Reason', value: (x) => x.r.removalReason || '' },
+        { label: 'Age (d)', num: true, value: (x) => (x.a.birthDate ? U.diff(x.r.removedDate, x.a.birthDate) : '') }, { label: 'Days in herd', num: true, value: (x) => (x.r.entryDate ? U.diff(x.r.removedDate, x.r.entryDate) : '') },
+      ] });
+      return { node: h('div', h('div.vsum', `${rows.length} boars removed`), g) };
+    } });
+  }
+
   /* ================= REPORTS MENU ================= */
   function menu(section = 'sows') {
     const win = ui().appWindow({ title: 'Reports', cls: 'menu-win', toolbar: [
@@ -848,6 +1055,10 @@
     const go = (fn) => () => S.app.show(fn);
     const B = (label, fn, opts = {}) => h('button.navy-btn' + (opts.disabled ? '.disabled' : '') + (opts.small ? '.small' : ''), { type: 'button', disabled: opts.disabled, title: opts.title || label, onclick: fn ? (opts.direct ? fn : go(fn)) : null }, label);
     const sec = (title, rows) => h('div.msec', h('h3', title), h('div.mrule'), rows.map((r) => h('div.mrow', r)));
+    const toolsSec = () => sec('Application tools', [
+      [B('Breakdown', tools.breakdown), B('Cross tabulation', tools.crosstab), B('Histogram', tools.histogram), B('Scatter table', tools.scatter)],
+      [B('Statistics', tools.statistics), B('Frequency distribution', tools.frequency), B('Time plot', tools.timeplot), B('X - Y plot', tools.xyplot)],
+    ]);
     let content;
     if (section === 'sows') {
       content = [
@@ -863,26 +1074,29 @@
           [B('Action lists', () => S.actionLists.open(), { direct: true }), B('Additional sheets', additionalSheets), B('Sow cards', () => S.sowCard.open(), { direct: true })],
           [B('Farrowing rate monitor', farrowingRateMonitor), B('Sow inventory', sowInventory), B('Sow selection', sowSelection), B('Vaccinations', vaccinations)],
         ]),
-        sec('Application tools', [
-          [B('Breakdown', tools.breakdown), B('Cross tabulation', tools.crosstab), B('Histogram', tools.histogram), B('Scatter table', tools.scatter)],
-          [B('Statistics', tools.statistics), B('Frequency distribution', tools.frequency), B('Time plot', tools.timeplot), B('X - Y plot', tools.xyplot)],
-        ]),
+        toolsSec(),
       ];
     } else if (section === 'piglets') {
       content = [
         h('h1.menu-title', 'Piglet reports'),
-        sec('Piglet performance', [[B('Pre-weaning mortality', preWeaningMortality), B('Piglet deaths', pigletDeaths), B('Fostering', fosteringReport), B('Litter weaning weights', weaningWeights)]]),
-        sec('Piglet information', [[B('Piglet inventory', littersOnHand), B('Weaning list', weaningList), B('Pigs weaned', pigsWeaned)]]),
+        sec('Piglet performance', [[B('Pre-weaning mortality', preWeaningMortality), B('Litter weaning weights', weaningWeights)]]),
+        sec('Specific reports', [[B('Herd performance', herdPerformance), B('Foster management', fosterManagement), B('Litter distribution', litterDistribution), B('Progeny selection', progenySelection)],
+          [B('Piglet inventory', littersOnHand), B('Weaning list', weaningList), B('Piglet deaths list', pigletDeaths)]]),
+        sec('Piglet death reports', [[B('Mortality reasons', mortalityReasons), B('Seasonal trends', seasonalTrends), B('Age at death', ageAtDeath), B('Parity', pigletParity)]]),
+        toolsSec(),
       ];
     } else {
       content = [
         h('h1.menu-title', 'Boar reports'),
-        sec('Boar information', [[B('Boar inventory', boarList), B('Boar usage', boarUsage), B('Boar performance', boarPerformance)]]),
+        sec('Boar performance', [[B('Mating performance', boarPerformance), B('Technician performance', technicianPerformance), B('Boar usage', boarUsage)]]),
+        sec('Specific reports', [[B('Herd performance', herdPerformance), B('Removals manager', boarRemovals)]]),
+        sec('Boar information', [[B('Numbers', boarList), B('Boar card', boarCard), B('Vaccinations', () => vaccinations({ boars: true }))]]),
+        toolsSec(),
       ];
     }
     win.appendChild(h('div.menu-body', content));
     return win;
   }
 
-  S.reports = { menu, herdPerformance, populationDynamics: () => S.app.show(populationDynamics), dueVaccinations, sowCard, table };
+  S.reports = { menu, herdPerformance, populationDynamics: () => S.app.show(populationDynamics), dueVaccinations, sowCard, table, exportData, logReport, vaccinationsEntry: () => vaccinations({ entry: true }), reportWindow, littersIn, weanedIn, servicesIn };
 })(window.SOS);

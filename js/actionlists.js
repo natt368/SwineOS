@@ -178,6 +178,7 @@
       { label: 'Preview', right: true, primary: true, manual: true, onClick: () => { preview(false); return true; } },
       { label: 'Print', manual: true, cls: 'print-btn', onClick: async () => {
         cfg.lastPrinted = to.value;
+        cfg.history = [...new Set([...(cfg.history || []), from.value])].slice(-30);
         await S.store.saveSettings({ ...S.store.settings, actionLists: cfg });
         lastDay.textContent = U.weekday(to.value);
         U.$('#al-last').value = to.value;

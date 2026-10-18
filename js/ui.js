@@ -59,6 +59,8 @@
     back.appendChild(box);
     document.body.appendChild(back);
     const key = (e) => {
+      const backs = document.querySelectorAll('.modal-back');
+      if (backs[backs.length - 1] !== back) return; // only the top dialog reacts to keys
       if (e.key === 'Escape') close();
       if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'SELECT') {
         const p = buttons.find((b) => b.primary);

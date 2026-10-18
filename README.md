@@ -4,7 +4,37 @@ Sow herd management for the barn office: record breeding, farrowing and weaning 
 
 It is a plain web app (HTML, CSS and JavaScript, no build step and no server). Open `index.html` in a browser, or use the hosted copy.
 
+## Moving from PigWIN / PigLITTER
+
+Make a farm backup in PigWIN (PigMAIN → Backup farm data). It is saved as a `.BDR` file named after the farm, for example `01042301Veteran Colony (AB)[2020_2_3][10_18_26].BDR`. In SwineOS open **More options → Import PigWIN backup** (or Settings → Backup & data) and choose that file.
+
+The backup is read in the browser. Nothing is uploaded anywhere. These records are converted:
+
+| PigWIN table | SwineOS |
+| --- | --- |
+| BASISVKN, BEDREIGENVKN | Sows and boars: ID, name, alt ID, responder, sex, birth date, genetics, entry parity |
+| AANAFVOERVKN | Arrival (with origin and weight), herd entry, culled / died / sold with reason |
+| DEKKEN | Matings with boar, technician, AI or natural |
+| WERPEN | Farrowings: born alive, stillborn, mummies, birth weight |
+| UITVAL | Piglet deaths with cause |
+| OVERLEGGEN | Fostering on / off with the other sow |
+| SPENEN | Weaning and part weaning with weight |
+| DRACHTIG | Negative pregnancy checks |
+| OMNUMMEREN | ID changes |
+| OPMERKINGEN, DGRCODELIJST | Removal reasons, piglet death causes, farrowing notes |
+| RASSENVKN, RELATIE | Genetics and technician names, origins |
+
+Piglets lost between farrowing and weaning that were never entered as deaths are counted as *not recorded* deaths, so pre-weaning mortality is calculated the same way as in PigWIN.
+
 ## What it does
+
+**Main menu** – Data Entry on the left (Sows / Boars, Gilt pool, Action list entry, Vaccinations, More options), Reports on the right (Sows / Gilts, Piglets, Boars, Sow cards, Herd performance, Action lists, Report generator), and PigMAIN for set-up options.
+
+**Gilt pool** – the data entry screen for replacement gilts, with Gilts due for mating / mated / culled lists and V-boar and Synchronise events.
+
+**Action list entry** – type farrowing, weaning, mating, pregnancy check, abortion and removal results for a whole week's list of sows in one grid and save them together.
+
+**Report generator** – your own saved lists (events in a period, herd entries, lifetime born alive, repeat breeders, service groups), run for any end date, previewed, printed or exported.
 
 **Sow data entry** – the main screen.
 - Event tabs along the bottom: Entry, Heat, Mate, ReproChk, Abort, Farrow, PigDth, Foster, PartWean, Wean, Nurse, Location, Edit ID, Disease, Remove.
@@ -48,7 +78,11 @@ The workflow in `.github/workflows/pages.yml` publishes the default branch. Unti
 | `js/calc.js` | Herd performance calculations and indicator definitions |
 | `js/entry.js` | Sow data entry window, event forms and validation |
 | `js/reports.js` | Reports menu and all report windows |
-| `js/sowcard.js` | Sow card window |
+| `js/sowcard.js` | Sow card window and print options |
+| `js/pigwin-import.js` | Reads PigWIN `.BDR` backups (zip + Paradox tables) |
+| `js/actionentry.js` | Action list entry |
+| `js/reportgen.js` | Report generator |
+| `js/mainmenu.js` | Main menu, PigMAIN set-up options, data checks |
 | `js/actionlists.js` | Action lists dialog and printout |
 | `js/settings.js` | Settings, backup / restore, import |
 | `js/demo.js` | Example herd generator |

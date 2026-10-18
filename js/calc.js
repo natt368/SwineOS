@@ -64,16 +64,20 @@
       littersWeaned: 0, pigsWeaned: 0, lactLens: [], weanWt: 0, weanWtPigs: 0, deaths: 0, fosterIn: 0,
       farrowIntervals: [], npd: 0, npdIncomplete: false, entryToService: [],
       giltsEntered: 0, culled: 0, died: 0, sold: 0, removedParities: [], abortEvents: 0, pregNeg: 0,
+      aiMatings: 0, natMatings: 0, multipleSvc: 0, mixedSvc: 0, weanWtLitters: 0,
     };
     for (const a of animals) {
       const r = M().analyze(a);
       if (a.sex === 'M') {
-        const arr = a.arrivalDate || a.entryDate || a.birthDate || '';
-        if (arr <= e && !(r.removed && r.removedDate <= e)) x.endBoars++;
+        const ent = r.entryDate;
+        if (ent && ent <= e && !(r.removed && r.removedDate <= e)) x.endBoars++;
         continue;
       }
       const entry = r.entryDate || r.firstServiceDate;
       if (!entry) continue;
+      // removed long before the period: nothing in it can count
+      if (r.removed && r.removedDate < b && (!r.events.length || r.events[r.events.length - 1].date < U.addDays(b, -gest - 30))) continue;
+      if (entry > e && (!r.events.length || r.events[0].date > e)) continue;
       const parE = M().parityAt(a, e);
       const entN = U.d2n(entry);
       const remN = r.removed ? U.d2n(r.removedDate) - 1 : todayN + 10000;
@@ -108,6 +112,9 @@
         if (!U.inRange(s.date, b, e) || !pp(s.parity)) continue;
         x.services++;
         x.matings += s.matings;
+        (s.methods || []).forEach((m) => { if (/natural/i.test(m)) x.natMatings++; if (/AI/.test(m)) x.aiMatings++; });
+        if (s.matings > 1) x.multipleSvc++;
+        if (new Set(s.boars).size > 1) x.mixedSvc++;
         if (s.isFirst) x.firstServices++; else x.repeatServices++;
         if (s.isGilt) x.giltServices++;
         if (s.wsi !== null && s.wsi !== undefined) { x.wsi.push(s.wsi); if (s.wsi <= 7) x.wsiWithin7++; }
@@ -134,7 +141,8 @@
         if (l.weanDate && l.lactLen !== null && U.inRange(l.weanDate, b, e) && pp(l.parity)) {
           x.littersWeaned++;
           x.lactLens.push(l.lactLen);
-          if (l.weanWeightCount) { x.weanWt += l.weanWeight; x.weanWtPigs += l.weanWeightCount; }
+          x.deaths += l.lostAtWean || 0;
+          if (l.weanWeightCount) { x.weanWt += l.weanWeight; x.weanWtPigs += l.weanWeightCount; x.weanWtLitters++; }
         }
       }
       // event-dated piglet flows
@@ -163,10 +171,10 @@
     { id: 'endBoars', label: 'Ending boar inventory', tabs: 'KT', f: n0, v: (x) => x.endBoars },
     { id: 'avgBF', label: 'Avg. breeding female inventory', tabs: 'T', f: n1, v: (x) => x.avgBF },
     { id: 'avgMBF', label: 'Avg. mated female inventory', tabs: 'T', f: n1, v: (x) => x.avgMBF },
-    { id: 'weanedMbf', label: 'Weaned pigs / MBF / year', tabs: 'KW', f: n1, v: (x) => div(x.pigsWeaned, x.avgMBF) * x.yearFactor, shade: (x) => x.days < 28, target: 'weanedMbfYear' },
-    { id: 'weanedBf', label: 'Weaned pigs / BF / year', tabs: 'KW', f: n1, v: (x) => div(x.pigsWeaned, x.avgBF) * x.yearFactor, shade: (x) => x.days < 28 },
-    { id: 'littersMbf', label: 'Litters farrowed / MBF / year', tabs: 'KF', f: n2, v: (x) => div(x.litters, x.avgMBF) * x.yearFactor, shade: (x) => x.days < 28, target: 'littersMbfYear' },
-    { id: 'littersBf', label: 'Litters farrowed / BF / year', tabs: 'KF', f: n2, v: (x) => div(x.litters, x.avgBF) * x.yearFactor, shade: (x) => x.days < 28 },
+    { id: 'weanedMbf', hideShaded: true, label: 'Weaned pigs / MBF / year', tabs: 'KW', f: n1, v: (x) => div(x.pigsWeaned, x.avgMBF) * x.yearFactor, shade: (x) => x.days < 28, target: 'weanedMbfYear' },
+    { id: 'weanedBf', hideShaded: true, label: 'Weaned pigs / BF / year', tabs: 'KW', f: n1, v: (x) => div(x.pigsWeaned, x.avgBF) * x.yearFactor, shade: (x) => x.days < 28 },
+    { id: 'littersMbf', hideShaded: true, label: 'Litters farrowed / MBF / year', tabs: 'KF', f: n2, v: (x) => div(x.litters, x.avgMBF) * x.yearFactor, shade: (x) => x.days < 28, target: 'littersMbfYear' },
+    { id: 'littersBf', hideShaded: true, label: 'Litters farrowed / BF / year', tabs: 'KF', f: n2, v: (x) => div(x.litters, x.avgBF) * x.yearFactor, shade: (x) => x.days < 28 },
     { id: 'services', label: 'Number of services', tabs: 'M', f: n0, v: (x) => x.services },
     { id: 'firstSvc', label: 'First services (after wean / entry)', tabs: 'M', f: n0, v: (x) => x.firstServices },
     { id: 'giltSvc', label: 'Gilts first served', tabs: 'M', f: n0, v: (x) => x.giltServices },
@@ -206,11 +214,27 @@
     { id: 'replRate', label: 'Replacement rate', tabs: 'T', f: n1, v: (x) => div(x.giltsEntered, x.avgBF) * x.yearFactor * 100 },
     { id: 'remPar', label: 'Avg. parity of removed females', tabs: 'T', f: n2, v: (x) => U.avg(x.removedParities) },
     { id: 'avgPar', label: 'Avg. parity for bdg female inventory', tabs: 'KT', f: n2, v: (x) => div(x.endParitySum, x.endBF) },
+    { id: 'aiPct', label: '% Artificial inseminations', tabs: 'M', f: n1, v: (x) => U.pct(x.aiMatings, x.aiMatings + x.natMatings) },
+    { id: 'natPct', label: '% Natural boar matings', tabs: 'M', f: n1, v: (x) => U.pct(x.natMatings, x.aiMatings + x.natMatings) },
+    { id: 'multiPct', label: '% Multiple matings', tabs: 'M', f: n1, v: (x) => U.pct(x.multipleSvc, x.services) },
+    { id: 'mixedPct', label: '% Mixed services (more than one boar)', tabs: 'M', f: n1, v: (x) => U.pct(x.mixedSvc, x.services) },
+    { id: 'wtLitPct', label: '% Litters with weaning weights', tabs: 'W', f: n1, v: (x) => U.pct(x.weanWtLitters, x.littersWeaned) },
+    { id: 'gestFemales', label: 'Ending gestating females', tabs: 'T', f: n0, v: (x) => x.endServed },
+    { id: 'lactFemales', label: 'Ending lactating females', tabs: 'T', f: n0, v: (x) => x.endLactating },
+    { id: 'openFemales', label: 'Ending open females (incl. gilts)', tabs: 'T', f: n0, v: (x) => x.endOpen + x.endGilts },
   ];
 
   const TABS = [
-    ['K', 'Key'], ['A', 'All'], ['M', 'Mating'], ['F', 'Farrowing'], ['W', 'Weaning'], ['R', 'Reproductive cycle'], ['T', 'Herd turnover'],
+    ['K', 'Key'], ['A', 'All'], ['M', 'Mating'], ['F', 'Farrowing'], ['W', 'Weaning'], ['R', 'Reproductive cycle'], ['T', 'Herd turnover'], ['C1', 'Custom 1'], ['C2', 'Custom 2'],
   ];
+  /** Indicators shown on a tab: user sets (Settings) override the built-in Key list. */
+  function metricsFor(tab) {
+    const sets = (S.store.settings && S.store.settings.hpSets) || {};
+    if (tab === 'A') return METRICS;
+    if (sets[tab] && sets[tab].length) return METRICS.filter((m) => sets[tab].includes(m.id));
+    if (tab === 'C1' || tab === 'C2') return [];
+    return METRICS.filter((m) => m.tabs.includes(tab));
+  }
 
   /** Build period list ending at `end`: n periods of `len` units. */
   function periods(end, n, len, unit) {
@@ -257,5 +281,5 @@
     ['location', 'Farrowing location', 'c'], ['boar', 'Boar', 'c'], ['month', 'Farrowing month', 'c'],
   ];
 
-  S.calc = { collect, periodStats, periods, METRICS, TABS, litterRecords, LITTER_FIELDS, productive, overlap };
+  S.calc = { metricsFor, collect, periodStats, periods, METRICS, TABS, litterRecords, LITTER_FIELDS, productive, overlap };
 })(window.SOS);

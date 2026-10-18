@@ -214,7 +214,7 @@
         try {
           await pool(dels, (u) => withRetry(() => db.collection('animals').doc(u).delete()), 4, (d) => onProgress && onProgress(d, total));
           base = dels.length;
-          await pool(animals, (a) => withRetry(() => db.collection('animals').doc(a.uid).set(a)), 4, (d) => onProgress && onProgress(base + d, total));
+          await pool(animals, (a) => withRetry(() => db.collection('animals').doc(a.uid).set(a)), animals.length > 2000 ? 8 : 4, (d) => onProgress && onProgress(base + d, total));
           if (settings) await withRetry(() => db.doc('meta/settings').set(JSON.parse(JSON.stringify(state.settings))));
         } catch (e) { cloudError(e); }
         bulk = false;

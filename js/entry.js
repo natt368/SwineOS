@@ -6,10 +6,13 @@
   const A = (a) => S.model.analyze(a);
 
   const TAB_ORDER = ['entry', 'heat', 'mate', 'preg', 'abort', 'farrow', 'pigdeath', 'foster', 'partwean', 'wean', 'nurse', 'location', 'editid', 'disease', 'remove'];
-  const TAB_LABEL = { entry: 'Entry', heat: 'Heat', mate: 'Mate', preg: 'ReproChk', abort: 'Abort', farrow: 'Farrow', pigdeath: 'PigDth', foster: 'Foster', partwean: 'PartWean', wean: 'Wean', nurse: 'Nurse', location: 'Location', editid: 'Edit ID', disease: 'Disease', remove: 'Remove' };
+  const GILT_TABS = ['entry', 'vboar', 'synch', 'heat', 'mate', 'preg', 'location', 'editid', 'disease', 'remove'];
+  const TAB_LABEL = { vboar: 'V-boar', synch: 'Synchronise', entry: 'Entry', heat: 'Heat', mate: 'Mate', preg: 'ReproChk', abort: 'Abort', farrow: 'Farrow', pigdeath: 'PigDth', foster: 'Foster', partwean: 'PartWean', wean: 'Wean', nurse: 'Nurse', location: 'Location', editid: 'Edit ID', disease: 'Disease', remove: 'Remove' };
   const ELIGIBLE = {
     entry: () => false,
     heat: (r) => ['Gilt', 'Open', 'Served'].includes(r.status),
+    vboar: (r) => r.status === 'Gilt',
+    synch: (r) => ['Gilt', 'Open'].includes(r.status),
     mate: (r) => ['Gilt', 'Open', 'Served', 'Lactating'].includes(r.status),
     preg: (r) => r.status === 'Served',
     abort: (r) => r.status === 'Served',
@@ -39,6 +42,8 @@
       case 'editid': return `${e.oldId || ''} → ${e.newId || ''}`;
       case 'disease': return [e.disease, e.treatment, e.dose].filter(Boolean).join(' · ');
       case 'vaccinate': return e.vaccine || '';
+      case 'vboar': return 'Boar exposure' + (e.boar ? ' – ' + e.boar : '');
+      case 'synch': return [e.product, e.days ? e.days + ' days' : ''].filter(Boolean).join(' · ');
       case 'condition': return [e.score ? 'Score ' + e.score : '', e.backfat ? 'Backfat ' + e.backfat + ' mm' : ''].filter(Boolean).join(' · ');
       case 'remove': return (e.kind === 'death' ? 'Death' : e.kind === 'sold' ? 'Sold' : 'Cull') + (e.reason ? ' – ' + e.reason : '');
       default: return '';
@@ -72,7 +77,7 @@
 
   /* ================= event forms ================= */
   function boarOptions() {
-    return S.store.animals().filter((b) => b.sex === 'M' && !A(b).removed).map((b) => b.id).sort(U.natCmp);
+    return S.store.animals().filter((b) => b.sex === 'M' && !A(b).removed && !b.blocked).map((b) => b.id).sort(U.natCmp);
   }
   function datalist(id, values) { return h('datalist', { id }, values.map((v) => h('option', { value: v }))); }
 
@@ -89,6 +94,18 @@
     const info = h('div.form-info');
     switch (type) {
       case 'heat': break;
+      case 'vboar': {
+        rows.push(datalist('dl-boars', boarOptions()));
+        rows.push(ui().field('Teaser / V-boar', ui().input('f-boar', e.boar || '', { list: 'dl-boars', autocomplete: 'off' })));
+        get.boar = () => U.$('#f-boar').value.trim();
+        break;
+      }
+      case 'synch':
+        rows.push(datalist('dl-synch', ['Regumate (altrenogest)', 'Matrix (altrenogest)', 'PG600', 'Lutalyse']));
+        rows.push(ui().field('Product', ui().input('f-prod', e.product || 'Regumate (altrenogest)', { list: 'dl-synch' })));
+        rows.push(ui().field('Number of days', ui().input('f-days', e.days ?? 14, { type: 'number', min: 1, max: 30 })));
+        Object.assign(get, { product: () => U.$('#f-prod').value.trim(), days: () => +U.$('#f-days').value || undefined });
+        break;
       case 'mate': {
         const bo = boarOptions();
         rows.push(datalist('dl-boars', bo));
@@ -241,7 +258,7 @@
       case 'pigdeath': case 'foster': case 'partwean': case 'wean':
         if (s !== 'Lactating') errors.push(`${a.id} is not lactating on ${U.fmt(ev.date)} (status: ${s}).`);
         else if (ev.type === 'pigdeath' && ev.count > rb.piglets) warnings.push(`Only ${rb.piglets} piglets are on this sow.`);
-        else if (ev.type === 'wean' && ev.count !== rb.piglets) warnings.push(`Piglets on sow by the records: ${rb.piglets}. Weaned: ${ev.count}. The difference will not be counted as deaths.`);
+        else if (ev.type === 'wean' && ev.count !== rb.piglets) warnings.push(`Piglets on sow by the records: ${rb.piglets}. Weaned: ${ev.count}. The difference will be counted as piglet deaths (not recorded).`);
         if (ev.type === 'pigdeath' && !ev.count) errors.push('Enter the number of piglets.');
         break;
       case 'nurse':
@@ -300,6 +317,24 @@
     return updated;
   }
 
+  /** Add several events to one animal without dialogs. Returns { animal, errors, warnings }. */
+  async function addEvents(a, evs) {
+    let cur = S.store.get(a.uid) || a;
+    let seq = (cur.events || []).reduce((m, x) => Math.max(m, x.seq || 0), 0);
+    const warnings = [];
+    for (const ev of evs) {
+      const v = validate(cur, ev);
+      if (v.errors.length) return { animal: null, errors: v.errors, warnings };
+      warnings.push(...v.warnings);
+      cur = { ...cur, events: [...cur.events, { ...ev, eid: U.uid('e'), seq: ++seq }] };
+      if ((ev.type === 'location' || ev.type === 'farrow') && ev.location) cur.location = ev.location;
+      if (ev.type === 'editid') cur.id = ev.newId;
+    }
+    const saved = await S.store.saveAnimal(cur);
+    S.store.log(`Action list entry: ${evs.map((e) => S.EVENTS[e.type].label).join(', ')} for ${saved.id}`);
+    return { animal: saved, errors: [], warnings };
+  }
+
   function openEventDialog(type, a, existing, done) {
     const f = eventForm(type, a, existing);
     const r = A(a);
@@ -314,37 +349,70 @@
   function animalForm(a, isNew) {
     const L = S.store.settings.lists;
     const x = a || {};
-    const node = h('div.form',
-      ui().field('ID (ear tag)', ui().input('a-id', x.id || '', { maxlength: 20, disabled: !isNew })),
-      ui().field('Type', ui().select('a-sex', [['F', 'Sow / gilt'], ['M', 'Boar']], x.sex || 'F', { disabled: !isNew && (x.events || []).length > 0 })),
-      ui().field('Birth date', ui().dateInput('a-birth', x.birthDate, { max: U.today() })),
-      ui().field('Arrival date', ui().dateInput('a-arr', x.arrivalDate || (isNew ? defaultDate() : ''), { max: U.today() })),
-      ui().field('Herd entry date', ui().dateInput('a-entry', x.entryDate || (isNew ? defaultDate() : ''), { max: U.today() }), 'Counted as breeding animal from this date'),
-      ui().field('Parity at entry', ui().input('a-par', x.entryParity || 0, { type: 'number', min: 0, max: 15 }), 'For purchased sows only'),
-      ui().field('Breed / line', ui().select('a-breed', [''].concat(L.breeds), x.breed || '')),
-      ui().field('Location', ui().select('a-loc', [''].concat(L.locations), x.location || '')),
-      ui().field('Origin / supplier', ui().input('a-origin', x.origin || '')),
-      ui().field('Dam / sire', ui().input('a-dam', x.pedigree || '', { placeholder: 'optional' })),
-      ui().field('Alt ID', ui().input('a-alt', x.altId || '', { maxlength: 30, placeholder: 'tattoo, RFID, registration no.' })),
-      ui().field('Remarks', ui().input('a-rem', x.remarks || '')));
-    const read = () => ({
-      id: U.$('#a-id').value.trim(), sex: U.$('#a-sex').value, birthDate: U.$('#a-birth').value || undefined,
-      arrivalDate: U.$('#a-arr').value || undefined, entryDate: U.$('#a-entry').value || undefined,
-      entryParity: +U.$('#a-par').value || 0, breed: U.$('#a-breed').value || undefined, location: U.$('#a-loc').value || undefined,
-      origin: U.$('#a-origin').value.trim() || undefined, pedigree: U.$('#a-dam').value.trim() || undefined, remarks: U.$('#a-rem').value.trim() || undefined, altId: U.$('#a-alt').value.trim() || undefined,
-    });
+    const ageNote = (inp, id) => { const sp = h('span.age-note#' + id); const upd = () => { const b = U.$('#a-birth') && U.$('#a-birth').value; sp.textContent = b && inp.value ? `Age: ${U.diff(inp.value, b)} days` : ''; }; inp.addEventListener('change', upd); setTimeout(upd, 0); return sp; };
+    const arr = ui().dateInput('a-arr', x.arrivalDate || (isNew ? defaultDate() : ''), { max: U.today() });
+    const ent = ui().dateInput('a-entry', x.noEntry ? '' : (x.entryDate || (isNew ? defaultDate() : '')), { max: U.today() });
+    const birth = ui().dateInput('a-birth', x.birthDate, { max: U.today(), onchange: () => { arr.dispatchEvent(new Event('change')); ent.dispatchEvent(new Event('change')); } });
+    const sex = ui().select('a-sex', [['F', 'Sow / gilt'], ['M', 'Boar']], x.sex || 'F', { disabled: !isNew && (x.events || []).length > 0, onchange: () => { boarRows.hidden = sex.value !== 'M'; } });
+    const origins = [...new Set((L.origins || []).concat(S.store.animals().map((y) => y.origin).filter(Boolean)))].sort();
+    const boarRows = h('div.he-boar',
+      ui().field('Boar type', ui().select('a-btype', ['Live boar', 'AI boar (semen)', 'V-boar (vasectomised)'], x.boarType || 'Live boar')),
+      ui().field('Block boar', h('input#a-block', { type: 'checkbox', checked: !!x.blocked }), 'Blocked boars are not offered for matings'));
+    boarRows.hidden = (x.sex || 'F') !== 'M';
+    const node = h('div.herd-entry',
+      h('fieldset', h('legend', 'Entry'),
+        h('div.form',
+          ui().field('Type', ui().select('a-etype', ['Arrival', 'Born on farm', 'Transfer in'], x.entryType || 'Arrival')),
+          ui().field('Arrival date', h('span.inline', arr, ageNote(arr, 'age-arr'))),
+          ui().field('Herd entry date', h('span.inline', ent, ageNote(ent, 'age-ent')), 'Leave empty if not entered in the breeding herd yet'),
+          ui().field('Kilograms', ui().input('a-kg', x.arrivalWeight ?? '', { type: 'number', step: '0.1', min: 0, style: { maxWidth: '110px' } })),
+          ui().field('Origin', h('span', datalist('dl-origin', origins), ui().input('a-origin', x.origin || '', { list: 'dl-origin' }))),
+          ui().field('Parity at entry', ui().input('a-par', x.entryParity || 0, { type: 'number', min: 0, max: 15, style: { maxWidth: '80px' } }), 'For purchased sows only'))),
+      h('fieldset', h('legend', 'General'),
+        h('div.he-cols',
+          h('div.form',
+            ui().field('ID', ui().input('a-id', x.id || '', { maxlength: 20, disabled: !isNew })),
+            ui().field('Alt ID', ui().input('a-alt', x.altId || '', { maxlength: 30 })),
+            ui().field('Gender', sex),
+            ui().field('Birth date', birth),
+            ui().field('Responder no.', ui().input('a-resp', x.responder || '', { maxlength: 30 })),
+            boarRows),
+          h('div.form',
+            ui().field('Name', ui().input('a-name', x.name || '', { maxlength: 30 })),
+            ui().field('Genetics', ui().select('a-breed', [''].concat(L.breeds), x.breed || '')),
+            ui().field('Genetic line', ui().input('a-line', x.line || '', { maxlength: 30 })),
+            ui().field('Location', ui().select('a-loc', [''].concat(L.locations), x.location || '')))),
+        h('div.form', ui().field('Comment', ui().input('a-rem', x.remarks || '')))),
+      h('fieldset', h('legend', 'Pedigree'),
+        h('div.he-cols',
+          h('div.form', h('div.he-sub', 'Sire'), ui().field('Name', ui().input('a-sire', x.sire || '')), ui().field('Alt ID', ui().input('a-sirealt', x.sireAlt || ''))),
+          h('div.form', h('div.he-sub', 'Dam'), ui().field('ID', ui().input('a-dam', x.dam || '')), ui().field('Alt ID', ui().input('a-damalt', x.damAlt || ''))))));
+    const val = (id) => { const el = U.$('#' + id); return el ? el.value.trim() || undefined : undefined; };
+    const read = () => {
+      const v = {
+        id: U.$('#a-id').value.trim(), sex: U.$('#a-sex').value, birthDate: val('a-birth'),
+        arrivalDate: val('a-arr'), entryDate: val('a-entry'), entryType: val('a-etype'), arrivalWeight: U.$('#a-kg').value ? +U.$('#a-kg').value : undefined,
+        entryParity: +U.$('#a-par').value || 0, breed: val('a-breed'), line: val('a-line'), location: val('a-loc'), name: val('a-name'),
+        origin: val('a-origin'), responder: val('a-resp'), altId: val('a-alt'), remarks: val('a-rem'),
+        sire: val('a-sire'), sireAlt: val('a-sirealt'), dam: val('a-dam'), damAlt: val('a-damalt'),
+        boarType: U.$('#a-sex').value === 'M' ? val('a-btype') : undefined, blocked: U.$('#a-sex').value === 'M' ? U.$('#a-block').checked || undefined : undefined,
+      };
+      v.noEntry = v.entryDate ? undefined : true;
+      return v;
+    };
     return { node, read };
   }
 
   function openEntryDialog(id, done) {
     const f = animalForm({ id }, true);
-    ui().modal({ title: 'Entry – new animal', body: f.node, width: 520, buttons: [
+    ui().modal({ title: 'Herd entry details (new)', body: f.node, width: 860, buttons: [
       { label: 'Save', primary: true, onClick: async () => {
         const v = f.read();
         if (!v.id) { await ui().alertBox('Cannot save', 'Enter an ID.'); return true; }
         const clash = S.store.findById(v.id);
         if (clash && !A(clash).removed) { await ui().alertBox('Cannot save', `ID ${v.id} is already used by an active animal.`); return true; }
         if (!v.arrivalDate && !v.entryDate) { await ui().alertBox('Cannot save', 'Enter an arrival or herd entry date.'); return true; }
+        if (!v.arrivalDate) v.arrivalDate = v.entryDate;
         if (v.birthDate && v.arrivalDate && v.arrivalDate < v.birthDate) { await ui().alertBox('Cannot save', 'Arrival is before birth.'); return true; }
         const a = await S.store.saveAnimal({ uid: U.uid(v.sex === 'M' ? 'b' : 's'), ...v, events: [] });
         S.store.log(`Entered new ${v.sex === 'M' ? 'boar' : 'female'} ${v.id}`);
@@ -365,12 +433,14 @@
       h('div', h('b', 'Parity: '), r.parity, '   ', h('b', 'Location: '), r.location || '–'),
       h('div', h('b', 'Age: '), r.ageDays !== null ? r.ageDays + ' days' : '–'),
       a.sex === 'F' ? h('div', h('b', 'Lifetime: '), `${lt.litters} litters · ${lt.ba} born alive · ${lt.weaned} weaned · ${U.num(lt.ba / (lt.litters || 1), 1)} BA/litter`) : null);
-    ui().modal({ title: 'Details – ' + a.id, body: h('div', summary, f.node), width: 560, buttons: [
+    ui().modal({ title: 'Herd entry details (edit / modified) – ' + a.id, body: h('div', summary, f.node), width: 860, buttons: [
       { label: 'Save', primary: true, onClick: async () => {
         const v = f.read();
         delete v.id;
         if (a.sex !== 'M' || !(a.events || []).length) { /* sex editable only when no events */ } else delete v.sex;
-        const upd = await S.store.saveAnimal({ ...a, ...v });
+        const merged = { ...a, ...v };
+        Object.keys(merged).forEach((k) => { if (merged[k] === undefined) delete merged[k]; });
+        const upd = await S.store.saveAnimal(merged);
         done && done(upd);
       } },
       { label: 'Delete animal…', right: true, onClick: async () => {
@@ -402,23 +472,25 @@
   }
 
   /* ================= the window ================= */
-  function open() {
-    const st = { tab: 'mate', list: 'Current', sel: null, histSel: null, lt: false, search: null };
-    const win = ui().appWindow({ title: 'Sow data entry', cls: 'entry-win', toolbar: [] });
+  function open(opts = {}) {
+    const gilt = opts.mode === 'gilt';
+    const tabs = gilt ? GILT_TABS : TAB_ORDER;
+    const st = { tab: gilt ? 'entry' : 'mate', list: gilt ? 'Gilts due for mating' : 'Current', sel: null, histSel: null, lt: false, search: null };
+    const win = ui().appWindow({ title: gilt ? 'Gilt pool' : 'Sow data entry', cls: 'entry-win', toolbar: [] });
     win.querySelector('.toolbar').remove();
-    const listTabs = ['Served', 'Lactating', 'Open', 'Active', 'Removed', 'All', 'Current'];
+    const listTabs = gilt ? ['Gilts due for mating', 'Gilts mated', 'Gilts culled'] : ['Served', 'Lactating', 'Open', 'Active', 'Removed', 'All', 'Current'];
     const statusCls = (r) => (r.removed ? 'st-removed' : 'st-' + r.status.toLowerCase());
 
     const listCols = [
       { label: 'ID', value: (a) => a.id, sort: (a) => a.id },
-      { label: 'Par', num: true, value: (a) => (a.sex === 'M' ? '' : A(a).parity), sort: (a) => A(a).parity },
+      gilt ? null : { label: 'Par', num: true, value: (a) => (a.sex === 'M' ? '' : A(a).parity), sort: (a) => A(a).parity },
       { label: 'Status', value: (a) => A(a).status },
       { label: 'Date', value: (a) => U.fmt(A(a).statusDate), sort: (a) => A(a).statusDate },
       { label: 'Days', num: true, value: (a) => A(a).daysInStatus ?? '' },
       { label: 'Location', value: (a) => A(a).location || '' },
       { label: 'Arrival date', value: (a) => U.fmt(a.arrivalDate), sort: (a) => a.arrivalDate || '' },
       { label: 'Birth date', value: (a) => U.fmt(a.birthDate), sort: (a) => a.birthDate || '' },
-    ];
+    ].filter(Boolean);
     const list = ui().grid({ columns: listCols, rows: [], cls: 'list-grid', rowKey: (a) => a.uid, rowClass: (a) => statusCls(A(a)), onRowClick: (a) => select(a, true), onRowDblClick: (a) => { select(a, true); enter(); }, emptyText: 'No animals in this list' });
     const listTabBar = h('div.subtabs', listTabs.map((t) => h('button.subtab', { type: 'button', 'data-t': t, onclick: () => { st.list = t; st.search = null; refreshList(); } }, t)));
     const count = h('span.list-count');
@@ -444,7 +516,7 @@
     const ltBox = h('input#lt-sum', { type: 'checkbox', onchange: (e) => { st.lt = e.target.checked; renderHistory(); } });
     const histHead = h('div.hist-head', histTitle, h('label.lt', ltBox, ' L T Summary'));
     const histHost = h('div.hist-host');
-    const evTabs = h('div.evtabs', TAB_ORDER.map((t) => h('button.evtab', { type: 'button', 'data-t': t, onclick: () => { st.tab = t; renderTabs(); if (st.list === 'Current') refreshList(); idInput.focus(); } }, TAB_LABEL[t])));
+    const evTabs = h('div.evtabs', tabs.map((t) => h('button.evtab', { type: 'button', 'data-t': t, onclick: () => { st.tab = t; renderTabs(); if (st.list === 'Current') refreshList(); idInput.focus(); } }, TAB_LABEL[t])));
 
     const left = h('div.entry-left', h('div.list-box', list, listTabBar), idPanel, tb, histHead, histHost, evTabs);
     const right = h('aside.entry-right',
@@ -467,7 +539,11 @@
     function listRows() {
       const all = S.store.animals();
       if (st.search) return all.filter(st.search.pred);
+      const isGilt = (a) => a.sex === 'F' && (Number(a.entryParity) || 0) === 0 && A(a).litters.length === 0;
       switch (st.list) {
+        case 'Gilts due for mating': return all.filter((a) => !A(a).removed && ((isGilt(a) && ['Gilt', 'Open'].includes(A(a).status)) || a.sex === 'M'));
+        case 'Gilts mated': return all.filter((a) => !A(a).removed && isGilt(a) && A(a).services.length);
+        case 'Gilts culled': return all.filter((a) => A(a).removed && isGilt(a));
         case 'Served': return all.filter((a) => A(a).status === 'Served');
         case 'Lactating': return all.filter((a) => A(a).status === 'Lactating');
         case 'Open': return all.filter((a) => ['Open', 'Gilt'].includes(A(a).status));
@@ -482,10 +558,13 @@
       }
     }
     function refreshList() {
-      const rows = listRows().sort((x, y) => (A(y).statusDate || '').localeCompare(A(x).statusDate || '') || U.natCmp(x.id, y.id));
+      const rows = listRows().sort((x, y) => (A(x).status === A(y).status ? 0 : A(x).status < A(y).status ? -1 : 1) || (A(y).statusDate || '').localeCompare(A(x).statusDate || '') || U.natCmp(x.id, y.id));
       list.update(rows, st.sel && st.sel.uid);
       count.textContent = `${rows.length} animals` + (st.search ? ' · ' + st.search.label : '');
-      win.querySelector('.win-name').textContent = `Sow data entry  (${rows.length} Sows selected)  -  [${S.store.settings.farmNumber} ${S.store.settings.farmName}]`;
+      const nG = S.store.animals().filter((a) => a.sex === 'F' && !A(a).removed && (Number(a.entryParity) || 0) === 0 && !A(a).litters.length).length;
+      win.querySelector('.win-name').textContent = gilt
+        ? `Sow data entry  (${nG} Gilts selected)  -  [${S.store.settings.farmNumber} ${S.store.settings.farmName}]`
+        : `Sow data entry  (${rows.length} Sows selected)  -  [${S.store.settings.farmNumber} ${S.store.settings.farmName}]`;
       renderTabs();
     }
     function select(a, fromList) {
@@ -517,10 +596,10 @@
         cls: 'hist-grid', rows, rowKey: (x, i) => (x.ev ? x.ev.eid : 'a' + i), selectedKey: st.histSel && st.histSel.eid,
         onRowClick: (x) => { st.histSel = x.ev || null; }, onRowDblClick: (x) => { st.histSel = x.ev || null; editSel(); },
         columns: [
-          { label: 'Par', num: true, value: (x) => x.par }, { label: 'Date', value: (x) => U.fmt(x.date), sort: (x) => x.date },
+          gilt ? null : { label: 'Par', num: true, value: (x) => x.par }, { label: 'Date', value: (x) => U.fmt(x.date), sort: (x) => x.date },
           { label: 'Interval', num: true, value: (x) => x.interval }, { label: 'Event', value: (x) => x.event }, { label: '#', num: true, value: (x) => x.count ?? '' },
           { label: 'Remarks', value: (x) => x.remarks },
-        ],
+        ].filter(Boolean),
       });
       histHost.appendChild(g);
       const scroller = g; requestAnimationFrame(() => { scroller.scrollTop = scroller.scrollHeight; });
@@ -671,5 +750,5 @@
     return win;
   }
 
-  S.entry = { open, describe, historyRows, ltSummaryRows, lifetime, openEventDialog, openEntryDialog, TAB_ORDER };
+  S.entry = { addEvents, validate, open, openGiltPool: () => open({ mode: 'gilt' }), describe, historyRows, ltSummaryRows, lifetime, openEventDialog, openEntryDialog, TAB_ORDER };
 })(window.SOS);

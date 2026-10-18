@@ -47,6 +47,8 @@
   /** Event types, in the order of the data-entry tabs. */
   S.EVENTS = {
     heat: { label: 'Heat', tab: 'Heat', name: 'Heat check' },
+    vboar: { label: 'Boar exposure', tab: 'V-boar', name: 'Boar exposure (V-boar)' },
+    synch: { label: 'Synchronisation', tab: 'Synchronise', name: 'Synchronisation' },
     mate: { label: 'Mating', tab: 'Mate', name: 'Mating' },
     preg: { label: 'Pregnancy check', tab: 'ReproChk', name: 'Repro check' },
     abort: { label: 'Abortion', tab: 'Abort', name: 'Abortion' },
@@ -93,7 +95,7 @@
       removedDate: '',
       removalKind: '',
       removalReason: '',
-      entryDate: a.entryDate || a.arrivalDate || '',
+      entryDate: a.noEntry ? '' : (a.entryDate || a.arrivalDate || ''),
       firstServiceDate: '',
       location: a.location || '',
       piglets: 0,
@@ -126,6 +128,7 @@
             last.matings++;
             last.lastMating = e.date;
             if (e.boar) last.boars.push(e.boar);
+            last.methods.push(e.method || 'AI');
             break;
           }
           if (litter) { // mated while lactating: treat as weaned
@@ -138,7 +141,7 @@
             prev = last.outcome === 'abort' ? 'abort' : 'return'; prevDate = last.outcomeDate || last.date;
           } else if (lastWeanDate) { prev = 'wean'; prevDate = lastWeanDate; }
           const svc = {
-            date: e.date, lastMating: e.date, matings: 1, boars: e.boar ? [e.boar] : [], parity: r.parity,
+            date: e.date, lastMating: e.date, matings: 1, boars: e.boar ? [e.boar] : [], methods: [e.method || 'AI'], parity: r.parity,
             prev, prevDate, wsi: prev === 'wean' ? U.diff(e.date, lastWeanDate) : null,
             isFirst: prev === 'wean' || prev === 'entry', isGilt: r.parity === 0 && prev === 'entry',
             outcome: null, outcomeDate: null, tech: e.tech || '', serviceNo: r.services.filter((s) => s.parity === r.parity).length + 1,
@@ -175,7 +178,7 @@
             farrowDate: e.date, parity: r.parity, service: svc || null, serviceDate: svc ? svc.date : U.addDays(e.date, -gest),
             gestLen: svc ? U.diff(e.date, svc.date) : null, liveBorn: lb, stillborn: sb, mummies: mm, totalBorn: lb + sb + mm,
             birthWeight: Number(e.birthWeight) || null, location: e.location || r.location, boar: svc && svc.boars[0] || '',
-            deaths: 0, deathsByCause: {}, fosterIn: 0, fosterOut: 0, partWeaned: 0, weaned: 0, weanCount: 0,
+            deaths: 0, lostAtWean: 0, deathsByCause: {}, fosterIn: 0, fosterOut: 0, partWeaned: 0, weaned: 0, weanCount: 0,
             weanDate: null, weanWeight: 0, weanWeightCount: 0, lactLen: null, assisted: !!e.assisted, nurse: false,
             prevFarrowDate: r.lastLitter ? r.lastLitter.farrowDate : null, sowId: a.id, sowUid: a.uid,
           };
@@ -229,6 +232,8 @@
             if (e.weight) { litter.weanWeight += Number(e.weight); litter.weanWeightCount += n; }
             litter.weanDate = e.date;
             litter.lactLen = U.diff(e.date, litter.farrowDate);
+            // piglets missing at weaning that were never recorded as dead
+            litter.lostAtWean = r.piglets - n; // net: negative when unrecorded fostering added piglets
             litter = null;
             r.piglets = 0;
           }
