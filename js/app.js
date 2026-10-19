@@ -99,7 +99,10 @@
       // load the newest Google Drive backup before deciding the herd is empty
       await Promise.race([S.drive.startup(), new Promise((r) => setTimeout(r, 20000))]);
     }
-    if (!S.store.animals().length && !U.$('.modal-back')) welcome();
+    if (!S.store.animals().length && !U.$('.modal-back')) {
+      if (S.drive.configured() && S.drive.status.state === 'connect') ui().toast('Click anywhere to load your herd from Google Drive.');
+      else welcome();
+    }
     void lastCount;
     document.addEventListener('keydown', (e) => {
       if (e.key === 'F2' && !U.$('.modal-back')) { e.preventDefault(); app.entry(); }

@@ -63,26 +63,66 @@
     return gisLoading;
   }
   function tokenValid() { return cfg.token && cfg.tokenExp && Date.now() < cfg.tokenExp - 60000; }
-  /** Get an access token. interactive=false tries without asking (may be blocked by the browser). */
+  /* One token client for the whole session; every request for a token waits on its answer. */
+  let waiters = [];
+  let clientFor = '';
+  function settle(err, token) {
+    const w = waiters; waiters = [];
+    w.forEach((x) => { clearTimeout(x.to); if (err) x.reject(err); else x.resolve(token); });
+  }
+  async function ensureClient() {
+    await loadGis();
+    if (tokenClient && clientFor === clientId()) return tokenClient;
+    clientFor = clientId();
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: clientFor, scope: SCOPE, login_hint: cfg.email || undefined,
+      callback: (r) => {
+        if (r.error) { settle(Object.assign(new Error(r.error_description || r.error), { code: 'connect' })); return; }
+        cfg.token = r.access_token; cfg.tokenExp = Date.now() + (Number(r.expires_in) || 3600) * 1000; save();
+        settle(null, cfg.token);
+      },
+      error_callback: (err) => settle(Object.assign(new Error(err && err.type === 'popup_failed_to_open' ? 'The browser blocked the Google sign-in window.' : 'Google sign-in was closed.'), { code: 'connect' })),
+    });
+    return tokenClient;
+  }
+  /** Ask Google for a token. Must run inside a click to be allowed by the browser, unless pop-ups are allowed for the site. */
+  function requestToken(timeoutMs) {
+    return new Promise((resolve, reject) => {
+      const to = setTimeout(() => { waiters = waiters.filter((x) => x.to !== to); reject(Object.assign(new Error('Google sign-in did not answer.'), { code: 'connect' })); }, timeoutMs);
+      waiters.push({ resolve, reject, to });
+      if (waiters.length === 1) tokenClient.requestAccessToken({ prompt: '' });
+    });
+  }
+  /** Get an access token. interactive=false tries without asking (the browser may block it). */
   async function getToken(interactive) {
     if (tokenValid()) return cfg.token;
     if (!clientId()) throw new Error('Enter the Google Client ID first.');
-    await loadGis();
-    return new Promise((resolve, reject) => {
-      const done = (fn) => (x) => { clearTimeout(to); fn(x); };
-      const to = setTimeout(() => reject(Object.assign(new Error('Google sign-in did not answer.'), { code: 'connect' })), interactive ? 120000 : 10000);
-      tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: clientId(), scope: SCOPE, login_hint: cfg.email || undefined,
-        callback: done((r) => {
-          if (r.error) { reject(Object.assign(new Error(r.error_description || r.error), { code: 'connect' })); return; }
-          cfg.token = r.access_token; cfg.tokenExp = Date.now() + (Number(r.expires_in) || 3600) * 1000; save();
-          resolve(cfg.token);
-        }),
-        error_callback: done((err) => reject(Object.assign(new Error(err && err.type === 'popup_failed_to_open' ? 'The browser blocked the Google sign-in window.' : 'Google sign-in was closed.'), { code: 'connect' }))),
-      });
-      tokenClient.requestAccessToken({ prompt: '' });
-    });
+    await ensureClient();
+    return requestToken(interactive ? 120000 : 8000);
   }
+
+  /* When the browser blocks the sign-in window on opening, the first click or key press anywhere
+     renews the sign-in (a click is allowed to open it) and then loads the newest backup. */
+  let gestureArmed = false;
+  function armFirstClick() {
+    if (gestureArmed || !tokenClient) return;
+    gestureArmed = true;
+    const handler = (ev) => {
+      if (ev.target && ev.target.closest && ev.target.closest('#drive-banner')) return; // the banner's own buttons handle it
+      document.removeEventListener('pointerdown', handler, true);
+      document.removeEventListener('keydown', handler, true);
+      gestureArmed = false;
+      if (tokenValid()) return;
+      setStatus('loading');
+      requestToken(60000).then(async () => {
+        const bar = document.getElementById('drive-banner'); if (bar) bar.remove();
+        await sync(true);
+      }).catch((e) => { setStatus('connect', e.message); reconnectBanner(); });
+    };
+    document.addEventListener('pointerdown', handler, true);
+    document.addEventListener('keydown', handler, true);
+  }
+
   async function api(path, opts = {}, interactive = false) {
     const token = await getToken(interactive);
     const res = await fetch(path.startsWith('http') ? path : API + path, { ...opts, headers: { Authorization: 'Bearer ' + token, ...(opts.headers || {}) } });
@@ -216,6 +256,7 @@
       setStatus('ok');
     } catch (e) {
       setStatus(e.code === 'connect' ? 'connect' : 'error', e.message);
+      if (e.code === 'connect') armFirstClick();
       if (interactive) throw e;
     } finally { busy = false; }
   }
@@ -306,12 +347,15 @@
     setStatus('loading');
     try { await sync(true); } catch (e) {
       setStatus(e.code === 'connect' ? 'connect' : 'error', e.message);
-      if (e.code === 'connect') reconnectBanner();
+      if (e.code === 'connect') {
+        // blocked without a click: renew on the first click instead of asking
+        try { await ensureClient(); armFirstClick(); } catch (e2) { reconnectBanner(); }
+      }
     }
   }
   function reconnectBanner() {
     if (document.getElementById('drive-banner')) return;
-    const bar = h('div#drive-banner', h('span', cfg.loadOnOpen ? 'Connect to Google Drive to load the latest backup and keep backing up.' : 'Connect to Google Drive to keep backing up.'),
+    const bar = h('div#drive-banner', h('span', 'Google Drive sign-in did not finish, so the latest backup is not loaded yet. Press Connect, or allow pop-ups for this site so it happens by itself.'),
       h('button.wbtn', { type: 'button', onclick: async () => { try { await getToken(true); bar.remove(); setStatus('loading'); await sync(true); } catch (e) { ui().alertBox('Google Drive', e.message); } } }, 'Connect'),
       h('button.wbtn', { type: 'button', onclick: () => bar.remove() }, 'Not now'));
     document.body.appendChild(bar);
@@ -405,7 +449,7 @@
           }) }, 'Choose folder…')),
         h('label.blk', h('input', { type: 'checkbox', checked: cfg.auto, onchange: (e) => { cfg.auto = e.target.checked; save(); } }), ' Back up automatically after changes'),
         h('label.blk', h('input', { type: 'checkbox', checked: cfg.loadOnOpen, onchange: (e) => { cfg.loadOnOpen = e.target.checked; save(); } }), ' Load the latest backup from Google Drive when SwineOS opens'),
-        ui().field('Daily copies to keep', h('input', { type: 'number', min: 1, max: 365, value: cfg.keepDaily, style: { width: '80px' }, onchange: (e) => { cfg.keepDaily = Math.max(1, +e.target.value || 14); save(); } })),
+        ui().field('Daily copies to keep', h('input', { type: 'number', min: 1, max: 365, value: cfg.keepDaily, style: { width: '80px' }, onchange: (e) => { cfg.keepDaily = Math.max(1, +e.target.value || 14); save(); } }), 'Besides the main backup, one dated copy is saved per day. Older copies are deleted. Use Restore from Google Drive to go back to an earlier day.'),
         h('div.btn-col.gd-btns',
           h('button.wbtn', { type: 'button', disabled: !configured(), onclick: async () => { try { await backupNow(true); ui().toast('Backed up to Google Drive.', 'ok'); render(); } catch (e) { ui().alertBox('Google Drive', e.message); } } }, 'Back up now'),
           h('button.wbtn', { type: 'button', disabled: !configured(), onclick: restoreDialog }, 'Restore from Google Drive…')),

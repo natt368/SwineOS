@@ -46,7 +46,7 @@
       if (ds === 'loading') return { st: 'saving', label: 'Checking backup…', detail: 'Checking Google Drive for the newest backup.' };
       if (ds === 'pending') return { st: 'pending', label: 'Backing up soon', detail: 'Your latest changes are saved on this computer and go to Google Drive within a minute.' };
       if (ds === 'ok') return { st: 'safe', label: `Backed up to ${cfg.folderName}` + (when ? ' · ' + when : ''), detail: `Saved on this computer and backed up to Google Drive (folder "${cfg.folderName}")${when ? ', ' + when : ''}.` };
-      if (ds === 'connect') return { st: 'warn', label: 'Backup paused', detail: 'Google Drive sign-in has expired. Changes are saved on this computer only until you reconnect.' };
+      if (ds === 'connect') return { st: 'warn', label: 'Click to reconnect', detail: 'Google Drive sign-in needs renewing. Click anywhere in SwineOS and it renews and loads the latest backup. Until then changes are saved on this computer.' };
       if (ds === 'error') return { st: 'warn', label: 'Backup failed', detail: 'The last Google Drive backup failed: ' + (d.status.msg || 'unknown error') + '. Changes are saved on this computer; SwineOS tries again after the next change.' };
       return { st: 'saving', label: 'Connecting…', detail: 'Connecting to Google Drive.' };
     }
