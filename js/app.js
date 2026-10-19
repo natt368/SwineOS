@@ -81,7 +81,9 @@
     root = U.$('#app');
     // inside the claude.ai viewer the print dialog is unavailable; Export still works
     if (window.claude) document.documentElement.classList.add('in-artifact');
-    root.innerHTML = '<div class="loading">Loading herd records…</div>';
+    // index.html already shows the running pig; only add it if the page was opened another way
+    if (!root.querySelector('.loading')) root.innerHTML = '<div class="loading"><div class="loading-text">Loading herd records…</div></div>';
+    const loadingText = (t) => { const el = root.querySelector('.loading-text'); if (el) el.textContent = t; };
     await S.store.init();
     S.safety.start();
     S.mainMenu.applyScale();
@@ -94,11 +96,13 @@
       else if (!U.$('.modal-back') && app.current && app.current.classList.contains('home-win')) app.home();
       lastCount = S.store.animals().length;
     });
-    app.home();
     if (S.drive.configured()) {
-      // load the newest Google Drive backup before deciding the herd is empty
-      await Promise.race([S.drive.startup(), new Promise((r) => setTimeout(r, 20000))]);
+      // load the newest Google Drive backup before deciding the herd is empty; keep the pig running meanwhile
+      if (!S.store.animals().length) loadingText('Loading herd from Google Drive…');
+      else app.home();
+      await Promise.race([S.drive.startup(), new Promise((r) => setTimeout(r, S.store.animals().length ? 20000 : 60000))]);
     }
+    if (root.querySelector('.loading')) app.home();
     if (!S.store.animals().length && !U.$('.modal-back')) {
       if (S.drive.configured() && S.drive.status.state === 'connect') ui().toast('Click anywhere to load your herd from Google Drive.');
       else welcome();

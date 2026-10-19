@@ -8,7 +8,29 @@
 <link rel="stylesheet" href="css/swineos.css">
 </head>
 <body>
-<div id="app"></div>
+<div id="app"><div class="loading" role="status">
+<svg class="run-pig" viewBox="0 0 220 130" aria-hidden="true">
+<ellipse class="rp-shadow" cx="102" cy="116" rx="58" ry="5"/>
+<g class="rp-speed"><path d="M8 50h28"/><path d="M0 66h34"/><path d="M10 82h22"/></g>
+<g class="rp-dust"><circle cx="46" cy="110" r="5"/><circle cx="34" cy="106" r="3.5"/><circle cx="24" cy="111" r="2.5"/></g>
+<g class="rp-pig">
+<rect class="rp-leg far l1" x="62" y="78" width="10" height="28" rx="5"/>
+<rect class="rp-leg far l2" x="124" y="78" width="10" height="28" rx="5"/>
+<path class="rp-tail" d="M50 58c-6-5-15-2-14 5s11 5 10-1c-1-4-7-5-10-1"/>
+<ellipse class="rp-body" cx="98" cy="64" rx="50" ry="31"/>
+<path class="rp-ear far" d="M136 34l4-16 12 14z"/>
+<circle class="rp-head" cx="150" cy="56" r="23"/>
+<path class="rp-ear" d="M146 36l-2-17 14 11z"/>
+<ellipse class="rp-snout" cx="171" cy="62" rx="10" ry="9"/>
+<circle class="rp-nose" cx="168" cy="61" r="1.8"/><circle class="rp-nose" cx="174" cy="61" r="1.8"/>
+<circle class="rp-eye" cx="156" cy="49" r="3"/>
+<path class="rp-cheek" d="M150 66a6 4 0 0 0 9 0"/>
+<rect class="rp-leg l3" x="70" y="80" width="10" height="28" rx="5"/>
+<rect class="rp-leg l4" x="132" y="80" width="10" height="28" rx="5"/>
+</g>
+</svg>
+<div class="loading-text">Loading herd records…</div>
+</div></div>
 <script src="js/util.js"></script>
 <script src="js/config.js"></script>
 <script src="js/model.js"></script>

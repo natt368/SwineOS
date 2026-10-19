@@ -14,12 +14,14 @@ const html = readFileSync(join(root, 'index.html'), 'utf8');
 const css = [...html.matchAll(/<link rel="stylesheet" href="([^"]+)">/g)].map((m) => readFileSync(join(root, m[1]), 'utf8')).join('\n');
 const js = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => readFileSync(join(root, m[1]), 'utf8').replace(/<\/script/gi, '<\\/script')).join('\n;\n');
 const title = (html.match(/<title>([^<]*)<\/title>/) || [, 'SwineOS'])[1];
+// the markup in <body> before the scripts (the running-pig loading screen), so it shows before the scripts run
+const bodyHtml = (html.match(/<body>\s*([\s\S]*?)\s*<script/) || [, '<div id="app"></div>'])[1];
 
 const page = `<title>${title}</title>
 <style>
 ${css}
 </style>
-<div id="app"></div>
+${bodyHtml}
 <script>
 ${js}
 </script>
