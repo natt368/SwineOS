@@ -10,6 +10,7 @@
   const LS_KEY = 'swineos.v1';
 
   const state = {
+    savedAt: '', // when the herd records last changed (ISO time)
     settings: null,
     animals: new Map(), // uid -> animal
     log: [],
@@ -17,6 +18,11 @@
     ready: false,
   };
   const listeners = new Set();
+  const changeListeners = new Set(); // user changes only (not loads)
+  function changed() {
+    state.savedAt = new Date().toISOString();
+    changeListeners.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
+  }
   let db = null;
   let bulk = false; // ignore partial snapshots while a whole-herd write is in flight
   let notifyQueued = false;
@@ -74,9 +80,10 @@
     state.animals = new Map();
     ((raw && raw.animals) || []).forEach((a) => state.animals.set(a.uid, a));
     state.log = (raw && raw.log) || [];
+    state.savedAt = (raw && raw.savedAt) || '';
   }
   const saveLocal = U.debounce(async () => {
-    const data = { settings: state.settings, animals: [...state.animals.values()], log: state.log.slice(-2000) };
+    const data = { savedAt: state.savedAt, settings: state.settings, animals: [...state.animals.values()], log: state.log.slice(-2000) };
     try {
       await idbPut(LS_KEY, data);
       try { localStorage.removeItem(LS_KEY); } catch (e) { /* ignore */ }
@@ -157,6 +164,8 @@
       notify();
     },
     onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+    /** Called after every change a user makes (for automatic backups). */
+    onLocalChange(fn) { changeListeners.add(fn); return () => changeListeners.delete(fn); },
     get settings() { return state.settings; },
     animals() { return [...state.animals.values()]; },
     get(uid) { return state.animals.get(uid); },
@@ -172,6 +181,7 @@
     async saveAnimal(a) {
       a = { ...a, events: [...(a.events || [])], updated: new Date().toISOString() };
       state.animals.set(a.uid, a);
+      changed();
       notify();
       if (state.backend === 'cloud') {
         try { await withRetry(() => db.collection('animals').doc(a.uid).set(a)); } catch (e) { cloudError(e); }
@@ -180,6 +190,7 @@
     },
     async deleteAnimal(uid) {
       state.animals.delete(uid);
+      changed();
       notify();
       if (state.backend === 'cloud') {
         try { await withRetry(() => db.collection('animals').doc(uid).delete()); } catch (e) { cloudError(e); }
@@ -187,6 +198,7 @@
     },
     async saveSettings(s) {
       state.settings = mergeSettings(s);
+      changed();
       notify();
       if (state.backend === 'cloud') {
         try { await withRetry(() => db.doc('meta/settings').set(JSON.parse(JSON.stringify(state.settings)))); } catch (e) { cloudError(e); }
@@ -200,10 +212,13 @@
       } else saveLocal();
     },
     /** Replace the whole herd (restore backup / demo / clear). */
-    async replaceAll(animals, settings, onProgress) {
+    async replaceAll(animals, settings, onProgress, opts = {}) {
       const old = [...state.animals.keys()];
       state.animals = new Map(animals.map((a) => [a.uid, a]));
       if (settings) state.settings = mergeSettings(settings);
+      if (opts.savedAt) state.savedAt = opts.savedAt; // loaded from a backup: not a new change
+      else changed();
+      if (opts.log) state.log = opts.log;
       notify();
       if (state.backend === 'cloud') {
         const keep = new Set(animals.map((a) => a.uid));
@@ -227,8 +242,17 @@
         } catch (e) { /* the live listener will catch up */ }
       } else saveLocal();
     },
-    exportJSON() {
-      return JSON.stringify({ app: 'SwineOS', version: 1, exported: new Date().toISOString(), settings: state.settings, animals: [...state.animals.values()] }, null, 1);
+    exportJSON(compact) {
+      return JSON.stringify({ app: 'SwineOS', version: 1, exported: new Date().toISOString(), savedAt: state.savedAt, settings: state.settings, animals: [...state.animals.values()], log: state.log.slice(-1500) }, null, compact ? 0 : 1);
+    },
+    /** Backup file contents (JSON, optionally gzip-compressed) -> object. */
+    async parseBackup(bytes) {
+      let u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+      if (u8[0] === 0x1f && u8[1] === 0x8b) u8 = new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+      return JSON.parse(new TextDecoder().decode(u8));
+    },
+    async gzipBackup() {
+      return new Uint8Array(await new Response(new Blob([Store.exportJSON(true)]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
     },
   };
 

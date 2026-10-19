@@ -36,6 +36,7 @@
       ['Getting started', 'Use Sow data entry to record events in the barn: matings, pregnancy checks, farrowings, piglet deaths, fostering and weaning. Reports and Action lists are calculated from those records.'],
       ['Entering a new animal', 'In Sows / Boars (or Gilt pool for gilts), click the Entry tab at the bottom, type the new ID and press Enter. Fill in the Herd entry details: arrival and herd entry dates, origin, genetics and so on.'],
       ['Action list entry', 'Enter results for a whole list of sows at once: pick the tab (Farrowing, Weaning, Mating …), type the numbers in the rows and press Enter on the toolbar.'],
+      ['Google Drive backup', 'Settings → Google Drive: connect your Google account and choose a folder. SwineOS then backs up a minute after every change, keeps a copy for each day, and loads the newest backup when it opens, so several computers can work on the same herd.'],
       ['Moving from PigWIN', 'Open More options → Import PigWIN backup and choose your .BDR backup file. All sows, boars and their history are loaded.'],
       ['Backups', S.store && S.store.state.backend === 'cloud' ? 'Records are kept in the shared online database. You can still download a backup file under Settings → Backup & data.' : 'Records are kept in this web browser. Download a backup file regularly under Settings → Backup & data, and restore it on another computer if needed.'],
     ],
@@ -90,7 +91,11 @@
       lastCount = S.store.animals().length;
     });
     app.home();
-    if (!S.store.animals().length) welcome();
+    if (S.drive.configured()) {
+      // load the newest Google Drive backup before deciding the herd is empty
+      await Promise.race([S.drive.startup(), new Promise((r) => setTimeout(r, 20000))]);
+    }
+    if (!S.store.animals().length && !U.$('.modal-back')) welcome();
     void lastCount;
     document.addEventListener('keydown', (e) => {
       if (e.key === 'F2' && !U.$('.modal-back')) { e.preventDefault(); app.entry(); }

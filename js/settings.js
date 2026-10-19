@@ -16,7 +16,7 @@
 
   function open(section = 'farm') {
     const s = JSON.parse(JSON.stringify(S.store.settings));
-    const tabsDef = [['farm', 'Farm'], ['codes', 'Code lists'], ['vacc', 'Vaccinations'], ['targets', 'Targets'], ['actions', 'Action lists'], ['data', 'Backup & data']];
+    const tabsDef = [['farm', 'Farm'], ['codes', 'Code lists'], ['vacc', 'Vaccinations'], ['targets', 'Targets'], ['actions', 'Action lists'], ['data', 'Backup & data'], ['drive', 'Google Drive']];
     if (section === 'entry' || section === 'report') section = 'farm';
     const body = h('div.settings');
     const tabBar = h('div.set-tabs');
@@ -65,6 +65,7 @@
       actions: () => h('div.form', h('p.hint', 'Default selections for the Action lists dialog.'),
         ...[['giltAge', 'Gilts from (days of age)'], ['openDays', 'Open sows from (days open)'], ['servicesLast', 'No. of services last (days)'], ['heat3', 'Heat check at 3 weeks from (days gestation)'], ['heat6', 'Heat check at 6 weeks from (days gestation)'], ['preg1', 'Pregnancy check on (days)'], ['preg2', 'Pregnancy check 2 on (days)'], ['served', 'Sows served (days)'], ['dueFarrow', 'Sows due to farrow next (days)'], ['weanLitters', 'Sows to be weaned, litters from (days)']]
           .map(([k, l]) => ui().field(l, num(s.actionLists, k, { min: 0 })))),
+      drive: () => S.drive.pane(),
       data: () => {
         const st = S.store.state;
         const females = S.store.animals().filter((a) => a.sex === 'F').length;
@@ -74,8 +75,9 @@
           s.demo ? h('p.demo-note', 'The herd on file is EXAMPLE data. Clear it before entering your own animals.') : null,
           h('div.btn-col',
             h('button.wbtn', { type: 'button', onclick: () => ui().saveFile(`swineos-backup-${U.today()}.json`, S.store.exportJSON(), 'application/json') }, 'Download backup'),
+            h('button.wbtn', { type: 'button', onclick: () => show('drive') }, S.drive.configured() ? 'Google Drive backup: ' + (S.drive.config.folderName || '') : 'Connect Google Drive for automatic backups…'),
             h('label.wbtn.file.big', 'Import PigWIN backup (.BDR)…', h('input', { type: 'file', accept: '.bdr,.BDR,.zip', onchange: (e) => importPigwin(e.target.files[0], prog) })),
-            h('label.wbtn.file', 'Restore backup…', h('input', { type: 'file', accept: '.json,application/json,.bdr,.BDR', onchange: (e) => restore(e.target.files[0], prog) })),
+            h('label.wbtn.file', 'Restore backup…', h('input', { type: 'file', accept: '.json,.gz,application/json,application/gzip,.bdr,.BDR', onchange: (e) => restore(e.target.files[0], prog) })),
             h('label.wbtn.file', 'Import animals from CSV…', h('input', { type: 'file', accept: '.csv,text/csv', onchange: (e) => importCsv(e.target.files[0], prog) })),
             h('button.wbtn', { type: 'button', onclick: () => loadDemo(prog) }, 'Load example herd'),
             h('button.wbtn.danger', { type: 'button', onclick: () => clearAll(prog) }, 'Clear all records')),
@@ -132,11 +134,11 @@
     const head = new Uint8Array(await file.slice(0, 2).arrayBuffer());
     if (head[0] === 0x50 && head[1] === 0x4b) { importPigwin(file, prog); return; } // a zip: PigWIN .BDR
     let data;
-    try { data = JSON.parse(await file.text()); } catch (e) { ui().alertBox('Restore failed', 'This file is not a SwineOS backup (it is not valid JSON).'); return; }
+    try { data = await S.store.parseBackup(await file.arrayBuffer()); } catch (e) { ui().alertBox('Restore failed', 'This file is not a SwineOS backup (it is not valid JSON).'); return; }
     if (!data || !Array.isArray(data.animals)) { ui().alertBox('Restore failed', 'This file is not a SwineOS backup (no animals found).'); return; }
     const ok = await ui().confirmBox('Restore backup', `Replace all current records with the backup from ${data.exported ? new Date(data.exported).toLocaleString() : 'this file'} (${data.animals.length} animals)?`, 'Replace records');
     if (!ok) return;
-    await S.store.replaceAll(data.animals, data.settings, progress(prog));
+    await S.store.replaceAll(data.animals, data.settings, progress(prog), { log: data.log });
     S.model.resetCache();
     S.store.log(`Restored backup with ${data.animals.length} animals`);
     ui().toast('Backup restored.', 'ok');

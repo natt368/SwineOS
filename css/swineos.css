@@ -555,3 +555,23 @@ button { cursor: pointer; }
 .cards.half { grid-template-columns: 1fr 1fr; }
 @media (max-width: 700px) { .cards.half { grid-template-columns: 1fr; } }
 .wbtn.file.big { font-weight: 600; border: 2px solid #0078d7; }
+
+/* ---------- Google Drive ---------- */
+.gd-spacer { flex: 1; }
+.gd-chip { align-self: center; border: 1px solid #9a9a9a; background: #fff; padding: 3px 10px; font-size: 12px; border-radius: 12px; margin-right: 8px; }
+.gd-chip.ok { border-color: #4a9a3a; background: #eef8ea; }
+.gd-chip.pending, .gd-chip.saving, .gd-chip.loading { border-color: #c88a00; background: #fff7e0; }
+.gd-chip.error, .gd-chip.connect { border-color: #b33; background: #ffe9e6; }
+.gd-pane .frow { grid-template-columns: 150px 1fr; }
+.gd-pane input#gd-client { background: #fff; border: 1px solid #7a7a7a; padding: 3px 6px; width: 100%; }
+.gd-help { margin: 6px 0 10px; font-size: 12px; }
+.gd-help ol { margin: 6px 0; padding-left: 22px; display: grid; gap: 3px; }
+.gd-row2 { display: flex; align-items: center; gap: 14px; margin: 8px 0; flex-wrap: wrap; }
+.gd-btns { margin-top: 10px; }
+.gd-status { margin-top: 8px; font-size: 12px; color: #234; }
+.gd-crumbs { padding: 4px 0 6px; font-size: 13px; }
+.linkbtn { background: none; border: 0; color: #0645ad; text-decoration: underline; padding: 0; }
+.gd-list { background: #fff; border: 1px solid #888; height: 320px; overflow: auto; font-size: 13px; }
+.gd-row { padding: 3px 8px; cursor: default; }
+.gd-row.sel { background: #0078d7; color: #fff; }
+#drive-banner { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; background: #fff3a8; border-top: 1px solid #c8a800; display: flex; gap: 12px; align-items: center; padding: 8px max(16px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); flex-wrap: wrap; font-size: 13px; }

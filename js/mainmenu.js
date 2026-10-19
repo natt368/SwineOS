@@ -11,7 +11,8 @@
       b('sow', 'SwineOS', () => S.app.home(), active === 'litter'),
       b('backup', 'PigMAIN', () => S.app.show(pigMain), active === 'main'),
       b('find', 'Selfservice', selfService),
-      b('help', 'Help', () => S.app.help('home')));
+      b('help', 'Help', () => S.app.help('home')),
+      h('span.gd-spacer'), S.drive.statusChip());
   }
 
   function home() {
@@ -101,6 +102,7 @@
       const cloud = S.store.state.backend === 'cloud';
       body = [h('h2', 'Internet'),
         h('p.pm-text', cloud ? 'Records are saved in the shared online database. Every computer and phone that opens this app link sees the same herd, and changes appear on the others within seconds.' : 'Records are saved in this web browser on this computer only. To use SwineOS on several computers with one shared herd, open it from the claude.ai link, or move data with Backup farm data / Restore.'),
+        row('Google Drive', 'Automatic backups to a Google Drive folder, loaded again when SwineOS opens', () => S.settingsUI.open('drive')),
         row('Backup farm data', 'Download a backup file of every animal and event', () => S.settingsUI.open('data'))];
     } else {
       body = [h('h2', 'Utilities'),
