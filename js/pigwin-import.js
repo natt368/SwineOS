@@ -93,7 +93,7 @@
 
   /* ---------------- conversion ---------------- */
   const TABLES = ['BASISVKN.DB', 'BEDREIGENVKN.DB', 'AANAFVOERVKN.DB', 'DEKKEN.DB', 'WERPEN.DB', 'SPENEN.DB', 'UITVAL.DB', 'OVERLEGGEN.DB',
-    'DRACHTIG.DB', 'OPMERKINGEN.DB', 'DGRCODELIJST.DB', 'RASSENVKN.DB', 'RELATIE.DB', 'OMNUMMEREN.DB', 'COMMENTVKN.DB', 'BASVARZG.DB', 'CONDITIE.DB'];
+    'DRACHTIG.DB', 'OPMERKINGEN.DB', 'DGRCODELIJST.DB', 'RASSENVKN.DB', 'RELATIE.DB', 'OMNUMMEREN.DB', 'COMMENTVKN.DB', 'BASVARZG.DB', 'CONDITIE.DB', 'STREEFZEUG.DB'];
   // event order on the same day
   const ORDER = { editid: 0, preg: 1, abort: 2, farrow: 3, foster: 4, pigdeath: 5, partwean: 6, wean: 7, location: 8, heat: 9, mate: 10, condition: 11, remove: 12 };
 
@@ -195,6 +195,17 @@
     }
     const zg = (t['BASVARZG.DB'] || [])[0] || {};
     const farm = (t['RELATIE.DB'] || []).find((r) => r.RelNum === 1);
+    // the farm's own targets (PigWIN: sow targets)
+    const sz = (t['STREEFZEUG.DB'] || [])[0] || {};
+    const num = (v) => (typeof v === 'number' && isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : undefined);
+    const targets = {
+      bornAlive: num(sz.AntLevGeb), totalBorn: num((sz.AntLevGeb || 0) + (sz.AntDodGeb || 0) + (sz.AntMumGeb || 0)),
+      weanedLitter: num(sz.AntSpn), pwm: num(sz.PrcUtvZgnBig), farrowRate: num(sz.AfbPrcErsDek), wsi: num(sz.IntSpnDek),
+      weanedMbfYear: num(sz.GgbZgnJar), littersMbfYear: num(sz.WrpIdx), cullRate: num(sz.PrcUtvZgnJar),
+      farrowInterval: sz.DrgTyd && sz.SpnLft ? num(sz.DrgTyd + sz.SpnLft + (sz.IntSpnDek || 0)) : undefined,
+      repeatPct: num(sz.PrcHerDek),
+    };
+    for (const k of Object.keys(targets)) if (targets[k] === undefined) delete targets[k];
     return {
       animals,
       stats: { animals: animals.length, events: nEvents, active: animals.filter((a) => !a.events.some((e) => e.type === 'remove')).length },
@@ -202,6 +213,7 @@
         farmName: (farm && farm.Nam) || opts.farmName,
         farmNumber: opts.farmNumber,
         gestationLength: zg.GemDrgTyd || 115,
+        targets,
         lists: {
           cullReasons: [...lists.cullReasons].sort(), deathReasons: [...lists.deathReasons].sort(), pigDeathCauses: [...lists.pigDeathCauses].sort(),
           technicians: [''].concat([...lists.technicians].sort()), breeds: [...lists.breeds].sort(),

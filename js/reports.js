@@ -166,7 +166,7 @@
     }
     function hpSettings() {
       const sets = JSON.parse(JSON.stringify(S.store.settings.hpSets || {}));
-      ['K', 'C1', 'C2'].forEach((k) => { if (!sets[k] || !sets[k].length) sets[k] = k === 'K' ? S.calc.METRICS.filter((m) => m.tabs.includes('K')).map((m) => m.id) : []; });
+      ['K', 'C1', 'C2'].forEach((k) => { if (!sets[k] || !sets[k].length) sets[k] = k === 'K' ? S.calc.LAYOUT.K.slice() : []; });
       const sorted = S.calc.METRICS.slice().sort((a, b) => a.label.localeCompare(b.label));
       let cur = sorted[0].id;
       const boxes = { K: h('input', { type: 'checkbox' }), C1: h('input', { type: 'checkbox' }), C2: h('input', { type: 'checkbox' }) };

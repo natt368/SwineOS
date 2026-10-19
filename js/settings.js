@@ -11,7 +11,7 @@
   const TARGETS = [
     ['weanedMbfYear', 'Weaned pigs / MBF / year'], ['littersMbfYear', 'Litters / MBF / year'], ['totalBorn', 'Total born / litter'], ['bornAlive', 'Born alive / litter'],
     ['weanedLitter', 'Weaned / litter'], ['pwm', 'Pre-weaning mortality % (max)'], ['farrowRate', 'Farrowing rate %'], ['wsi', 'Wean to service interval (max)'],
-    ['npd', 'Non-productive days / year (max)'], ['cullRate', 'Culling rate % (max)'], ['mortRate', 'Sow mortality rate % (max)'], ['farrowInterval', 'Farrowing interval (max)'],
+    ['npd', 'Non-productive days / year (max)'], ['cullRate', 'Culling rate % (max)'], ['mortRate', 'Sow mortality rate % (max)'], ['farrowInterval', 'Farrowing interval (max)'], ['repeatPct', 'Repeat services % (max)'],
   ];
 
   function open(section = 'farm') {
@@ -120,7 +120,7 @@
     const cur = S.store.settings;
     const lists = { ...cur.lists };
     for (const [k, v] of Object.entries(res.settings.lists)) lists[k] = [...new Set([...(cur.lists[k] || []), ...v])];
-    const settings = { ...cur, farmName: res.settings.farmName || cur.farmName, farmNumber: res.settings.farmNumber || cur.farmNumber, gestationLength: res.settings.gestationLength || cur.gestationLength, lists, demo: false };
+    const settings = { ...cur, farmName: res.settings.farmName || cur.farmName, farmNumber: res.settings.farmNumber || cur.farmNumber, gestationLength: res.settings.gestationLength || cur.gestationLength, targets: { ...cur.targets, ...(res.settings.targets || {}) }, lists, demo: false };
     await S.store.replaceAll(res.animals, settings, progress(prog));
     S.model.resetCache();
     S.store.log(`Imported PigWIN backup ${file.name}: ${st.animals} animals, ${st.events} events`);
