@@ -65,7 +65,7 @@
       if (e.type === 'farrow') { par++; interval = lastSvc ? U.diff(e.date, lastSvc) : ''; lastFarrow = e.date; }
       else if (e.type === 'wean') { interval = lastFarrow ? U.diff(e.date, lastFarrow) : ''; lastWean = e.date; }
       else if (e.type === 'mate') {
-        const same = prevMate && U.diff(e.date, prevMate) <= (S.store.settings.serviceGapDays || 3);
+        const same = prevMate && lastSvc && U.diff(e.date, lastSvc) <= (S.store.settings.serviceWindowDays || 6);
         if (!same) { interval = lastWean && (!lastSvc || lastSvc < lastWean) ? U.diff(e.date, lastWean) : lastSvc ? U.diff(e.date, lastSvc) : ''; lastSvc = e.date; }
         prevMate = e.date;
       } else if (['preg', 'heat', 'abort'].includes(e.type)) interval = lastSvc ? U.diff(e.date, lastSvc) : '';

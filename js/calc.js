@@ -72,7 +72,7 @@
       beginBF: 0, entered: 0, arrivalToEntry: [], arrivalAges: [], prospDays: 0, endProsp: 0, gestDays: 0, lactDays: 0,
       npdMbf: 0, endOpenMbf: 0, pureNat: 0, pureAI: 0, mixMethod: 0, farrowedParitySum: 0, birthWtLiveBorn: 0,
       liveBornWeaned: 0, netFostered: 0, nurseWeaned: 0, nursedPigs: 0, weanEvents: 0, litterPigsWeaned: 0, disrupted: 0,
-      culledParitySum: 0, removedBF: [], removedMBF: [],
+      culledParitySum: 0, removedBF: [], removedMBF: [], frServices: [],
     };
     const bPrev = U.addDays(b, -1);
     for (const a of animals) {
@@ -144,7 +144,7 @@
         if (U.inRange(entry, b, e)) {
           x.entered++;
           if (!(Number(a.entryParity) > 0)) x.giltsEntered++;
-          if (a.arrivalDate && r.entryDate && a.arrivalDate < r.entryDate) x.arrivalToEntry.push(U.diff(r.entryDate, a.arrivalDate));
+          if (a.arrivalDate && r.entryDate && a.arrivalDate <= r.entryDate) x.arrivalToEntry.push(U.diff(r.entryDate, a.arrivalDate));
         }
         if (r.removed && U.inRange(r.removedDate, b, e)) {
           if (r.removalKind === 'death') x.died++; else if (r.removalKind === 'sold') x.sold++; else { x.culled++; x.culledParitySum += parE; }
@@ -156,6 +156,7 @@
         if (r.firstServiceDate && U.inRange(r.firstServiceDate, b, e) && r.entryDate) x.entryToService.push(U.diff(r.firstServiceDate, r.entryDate));
       }
       for (const s of r.services) {
+        if (pp(s.parity) && U.inRange(s.date, U.addDays(b, -gest - 30), e)) x.frServices.push({ date: s.date, outcome: s.outcome, reason: s.outcome === 'removed' ? r.removalReason : '' });
         if (s.outcome === 'pending' && U.inRange(s.date, U.addDays(b, -gest - 10), e) && pp(s.parity)) x.npdIncomplete = true;
         if (!U.inRange(s.date, b, e) || !pp(s.parity)) continue;
         x.services++;
@@ -192,7 +193,6 @@
         if (l.weanDate && l.lactLen !== null && U.inRange(l.weanDate, b, e) && pp(l.parity)) {
           x.littersWeaned++;
           x.lactLens.push(l.lactLen);
-          x.deaths += l.lostAtWean || 0;
           if (l.weanWeightCount) { x.weanWt += l.weanWeight; x.weanWtPigs += l.weanWeightCount; x.weanWtLitters++; }
           x.liveBornWeaned += l.liveBorn;
           x.litterPigsWeaned += l.weaned || 0;
@@ -215,6 +215,19 @@
     x.avgBF = x.bfDays / days;
     x.avgMBF = x.mbfDays / days;
     x.avgProsp = x.prospDays / days;
+    // PigWIN: average herd gestation length of the period (fallback: the farm setting)
+    x.ahgl = x.gestLens.length ? Math.round(U.avg(x.gestLens)) : gest;
+    // Served to farrow this period: services made one gestation length before the period that did not
+    // farrow, plus every farrowing in the period (whenever its service was)
+    const wb = U.addDays(b, -x.ahgl); const we = U.addDays(e, -x.ahgl);
+    const notFarrowed = x.frServices.filter((s) => U.inRange(s.date, wb, we) && s.outcome !== 'farrow');
+    x.servedToFarrow = x.litters + notFarrowed.length;
+    x.frOpen = notFarrowed.filter((s) => s.outcome === 'pending').length;
+    // removed while served for a reason that is not reproductive: no chance to farrow
+    const REPRO = /abort|fail|fertil|conceiv|not pregnant|not in pig|preg|negative|mummif|dead litter|open|return|heat/i;
+    x.frNoChance = notFarrowed.filter((s) => s.outcome === 'removed' && !REPRO.test(s.reason || '')).length;
+    // PigWIN's piglet figures are per litter weaned in the period
+    x.pwmBase = x.liveBornWeaned + x.netFostered;
     x.yearFactor = 365 / days;
     return x;
   }
@@ -302,9 +315,9 @@
     { id: 'pigsWeaned', label: 'Total weaned pigs (part wean basis)', f: n0, v: (x) => x.pigsWeaned },
     { id: 'liveBornWeaned', label: 'Live born pigs of bdg females weaned', f: n0, v: (x) => x.liveBornWeaned },
     { id: 'deaths', label: 'Total recorded pig deaths', f: n0, v: (x) => x.deaths },
-    { id: 'pwm', label: '% Pre-weaning mortality (time period)', f: n1, v: (x) => U.pct(x.deaths, x.deaths + x.pigsWeaned), target: 'pwm', lower: true },
+    { id: 'pwm', label: '% Pre-weaning mortality (time period)', f: n1, v: (x) => U.pct(x.pwmBase - x.litterPigsWeaned, x.pwmBase), target: 'pwm', lower: true },
     { id: 'weanEvents', label: 'No. of litters weaned (incl. nurse)', f: n0, v: (x) => x.weanEvents },
-    { id: 'weanLitter', label: 'Avg. weaned pigs / wean litter', f: n1, v: (x) => div(x.pigsWeaned, x.littersWeaned), target: 'weanedLitter' },
+    { id: 'weanLitter', label: 'Avg. weaned pigs / wean litter', f: n1, v: (x) => div(x.litterPigsWeaned, x.littersWeaned), target: 'weanedLitter' },
     { id: 'weanLitterNurse', label: 'Pigs weaned per litter weaned (incl.nurse)', f: n1, v: (x) => div(x.pigsWeaned, x.weanEvents) },
     { id: 'nurseWeaned', label: 'Number of nurse bdg females weaned', f: n0, v: (x) => x.nurseWeaned },
     { id: 'nursedPigs', label: 'Total pigs nursed of BF weaned', f: n0, v: (x) => x.nursedPigs },
@@ -328,9 +341,9 @@
     { id: 'fiCount', label: 'BF farrowed with previous farrow', f: n0, v: (x) => x.farrowIntervals.length },
     { id: 'sumFi', label: 'Sum of farrowing intervals', f: n0, v: (x) => sum(x.farrowIntervals) },
     { id: 'fi', label: 'Farrowing interval', f: n1, v: (x) => U.avg(x.farrowIntervals), target: 'farrowInterval', lower: true },
-    { id: 'frServed', label: 'Served to farrow this period', f: n0, v: (x) => x.frDone, shade: (x) => x.frPending > 0 },
-    { id: 'fr', label: 'Farrowing rate', f: n1, v: (x) => U.pct(x.frFarrowed, x.frDone), shade: (x) => x.frPending > 0, target: 'farrowRate' },
-    { id: 'frAdj', label: 'Adjusted farrowing rate', f: n1, v: (x) => U.pct(x.frFarrowed, x.frDone - x.svcRemoved), shade: (x) => x.frPending > 0 },
+    { id: 'frServed', label: 'Served to farrow this period', f: n0, v: (x) => x.servedToFarrow, shade: (x) => x.frOpen > 0 },
+    { id: 'fr', hideShaded: short, label: 'Farrowing rate', f: n1, v: (x) => U.pct(x.litters, x.servedToFarrow), shade: (x) => short(x) || x.frOpen > 0, target: 'farrowRate' },
+    { id: 'frAdj', hideShaded: short, label: 'Adjusted farrowing rate', f: n1, v: (x) => U.pct(x.litters, x.servedToFarrow - x.frNoChance), shade: (x) => short(x) || x.frOpen > 0 },
     { id: 'bfDays', label: 'Total breeding female days', f: n0, v: (x) => x.bfDays },
     { id: 'unmatedDays', label: 'Unmated breeding female days', f: n0, v: (x) => x.bfDays - x.mbfDays },
     { id: 'mbfDays', label: 'Mated breeding female days', f: n0, v: (x) => x.mbfDays },
@@ -343,10 +356,12 @@
     { id: 'prodDaysYear', label: 'Avg. productive days / BF / year', f: n1, v: (x) => div(x.gestDays + x.lactDays, x.bfDays) * 365 },
     { id: 'npdMbfDays', label: 'Non-productive MBF days', f: n0, v: (x) => x.npdMbf, shade: (x) => x.npdIncomplete },
     { id: 'npdMbf', label: 'Avg. non-prod.days / MBF / year', f: n1, v: (x) => div(x.npdMbf, x.mbfDays) * 365, shade: (x) => x.npdIncomplete },
-    { id: 'littersMbf', hideShaded: true, label: 'Litters farrowed / MBF / year', f: n2, v: (x) => yr(x, x.litters, x.avgMBF), shade: short, target: 'littersMbfYear' },
-    { id: 'littersBf', hideShaded: true, label: 'Litters farrowed / BF / year', f: n2, v: (x) => yr(x, x.litters, x.avgBF), shade: short },
-    { id: 'weanedMbf', hideShaded: true, label: 'Weaned pigs / MBF / year', f: n1, v: (x) => yr(x, x.pigsWeaned, x.avgMBF), shade: short, target: 'weanedMbfYear' },
-    { id: 'weanedBf', hideShaded: true, label: 'Weaned pigs / BF / year', f: n1, v: (x) => yr(x, x.pigsWeaned, x.avgBF), shade: short },
+    // PigWIN: gestation days per (mated) female day, per year, divided by the average gestation length;
+    // weaned pigs = that times the average weaned per litter
+    { id: 'littersMbf', hideShaded: short, label: 'Litters farrowed / MBF / year', f: n2, v: (x) => div(x.gestDays * 365, x.mbfDays) / x.ahgl, shade: (x) => short(x) || x.npdIncomplete, target: 'littersMbfYear' },
+    { id: 'littersBf', hideShaded: short, label: 'Litters farrowed / BF / year', f: n2, v: (x) => div(x.gestDays * 365, x.bfDays) / x.ahgl, shade: (x) => short(x) || x.npdIncomplete },
+    { id: 'weanedMbf', hideShaded: short, label: 'Weaned pigs / MBF / year', f: n1, v: (x) => div(x.litterPigsWeaned * x.gestDays, x.mbfDays * x.littersWeaned) * 365 / x.ahgl, shade: (x) => short(x) || x.npdIncomplete, target: 'weanedMbfYear' },
+    { id: 'weanedBf', hideShaded: short, label: 'Weaned pigs / BF / year', f: n1, v: (x) => div(x.litterPigsWeaned * x.gestDays, x.bfDays * x.littersWeaned) * 365 / x.ahgl, shade: (x) => short(x) || x.npdIncomplete },
     // SwineOS extras (not in PigWIN's lists; on the All tab and for Custom tabs)
     { id: 'firstSvc', label: 'First services (after wean / entry)', f: n0, v: (x) => x.firstServices },
     { id: 'giltSvc', label: 'Gilts first served', f: n0, v: (x) => x.giltServices },
@@ -354,6 +369,8 @@
     { id: 'multiBoarPct', label: '% Services with more than one boar', f: n1, v: (x) => U.pct(x.mixedSvc, x.services) },
     { id: 'frPending', label: 'Services with unknown outcome', f: n0, v: (x) => x.frPending },
     { id: 'returnsPct', label: 'Returns to service %', f: n1, v: (x) => U.pct(x.returns + x.negs, x.frDone), shade: (x) => x.frPending > 0 },
+    { id: 'frByService', label: 'Farrowing rate (services made in the period)', f: n1, v: (x) => U.pct(x.frFarrowed, x.frDone), shade: (x) => x.frPending > 0 },
+    { id: 'pigDeathsNet', label: 'Piglet losses incl. difference at weaning', f: n0, v: (x) => x.pwmBase - x.litterPigsWeaned },
     { id: 'aborts', label: 'Abortions', f: n0, v: (x) => x.abortEvents },
     { id: 'pregNeg', label: 'Negative pregnancy checks', f: n0, v: (x) => x.pregNeg },
     { id: 'giltLitters', label: 'Gilt litters (parity 1) %', f: n1, v: (x) => U.pct(x.giltLitters, x.litters) },

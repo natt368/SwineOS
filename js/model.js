@@ -10,7 +10,7 @@
     gestationLength: 115,
     targetLactation: 21,
     giltEntryAge: 200,
-    serviceGapDays: 3, // matings within this many days belong to the same service
+    serviceWindowDays: 6, // as PigWIN: matings up to this many days after a service's first mating belong to it
     demo: false,
     lists: {
       locations: ['Gest 1', 'Gest 2', 'Gest 3', 'Breeding', 'Farr 1', 'Farr 2', 'Farr 3', 'Farr 4', 'Gilt pen', 'Boar barn'],
@@ -77,7 +77,7 @@
     if (hit) return hit;
     const st = S.store && S.store.settings ? S.store.settings : S.DEFAULT_SETTINGS;
     const gest = st.gestationLength || 115;
-    const gap = st.serviceGapDays || 3;
+    const gap = st.serviceWindowDays || 6;
     const today = U.today();
     const isBoar = a.sex === 'M';
     const events = [...(a.events || [])].sort(sortEv);
@@ -124,7 +124,7 @@
         case 'mate': {
           if (isBoar) break;
           const last = r.services[r.services.length - 1];
-          if (last && last === pending && U.diff(e.date, last.lastMating) <= gap) {
+          if (last && last === pending && U.diff(e.date, last.date) <= gap) {
             last.matings++;
             last.lastMating = e.date;
             if (e.boar) last.boars.push(e.boar);

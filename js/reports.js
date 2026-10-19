@@ -144,7 +144,7 @@
               cls += good ? ' good' : ' bad';
             }
             if (i === stats.length) cls += ' tot';
-            return h('td', { class: cls.trim() || null, 'data-i': i, onclick: (ev) => selectCell(m, i, ev.currentTarget) }, sh && m.hideShaded ? '' : m.f(v));
+            return h('td', { class: cls.trim() || null, 'data-i': i, onclick: (ev) => selectCell(m, i, ev.currentTarget) }, (typeof m.hideShaded === 'function' ? m.hideShaded(x) : sh && m.hideShaded) ? '' : m.f(v));
           }),
           h('td.tgt', m.target && tgt[m.target] !== undefined ? String(tgt[m.target]) : '')))));
       body.innerHTML = '';

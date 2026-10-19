@@ -15,7 +15,7 @@
   function cardRows(a) {
     const r = A(a);
     const gest = S.store.settings.gestationLength;
-    const gap = S.store.settings.serviceGapDays || 3;
+    const gap = S.store.settings.serviceWindowDays || 6;
     const rows = [];
     if (a.birthDate) rows.push({ par: 0, date: a.birthDate, interval: '', event: 'Birth', n: '', rem: '' });
     if (a.arrivalDate) rows.push({ par: Number(a.entryParity) || 0, date: a.arrivalDate, interval: a.birthDate ? U.diff(a.arrivalDate, a.birthDate) : '', event: 'Arrival', n: '', rem: a.origin || '' });
@@ -25,7 +25,7 @@
     for (const e of r.events) {
       const row = { par, date: e.date, interval: '', event: (S.EVENTS[e.type] || {}).label || e.type, n: '', rem: [S.entry.describe(e), e.remarks].filter(Boolean).join(' – '), type: e.type };
       if (e.type === 'mate') {
-        const repeatMating = prevMate && U.diff(e.date, prevMate) <= gap;
+        const repeatMating = prevMate && lastSvc && U.diff(e.date, lastSvc) <= gap;
         prevMate = e.date;
         if (repeatMating) { row.interval = U.diff(e.date, lastSvc); }
         else {
