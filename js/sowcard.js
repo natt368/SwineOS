@@ -9,7 +9,12 @@
     ['active', '*Active sows'], ['served', 'Served sows'], ['lactating', 'Lactating sows'], ['open', 'Open sows'],
     ['gilts', 'Gilts'], ['removed', 'Removed sows'], ['all', 'All sows'],
   ];
-  const mgroup = (iso) => { const w = U.isoWeek(iso); return w.slice(2, 4) + '-' + w.slice(6); };
+  // PigWIN's Filter type list; date-based ones use the From – To dates
+  const FILTERS = [['all', 'All'], ['active', 'Sows active'], ['removed', 'Sows removed'], ['giltsServe', 'Gilts to be served'], ['open', 'Open'],
+    ['heat3', 'Heat check at 3 weeks'], ['heat6', 'Heat check at 6 weeks'], ['preg', 'Pregnancy check'], ['served', 'Sows served'], ['due', 'Sows due to farrow'], ['wean', 'Sows to be weaned']];
+  const DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayDate = (iso) => (iso ? `${DAY[new Date(iso + 'T12:00:00').getDay()]}:${U.fmt(iso)}` : '');
+  const mgroup = (iso) => U.matingGroup(iso);
 
   /** Card history rows in the old program's style. */
   function cardRows(a) {
@@ -23,7 +28,7 @@
     let par = Number(a.entryParity) || 0;
     let lastWean = null; let lastSvc = null; let lastFarrow = null; let prevMate = null;
     for (const e of r.events) {
-      const row = { par, date: e.date, interval: '', event: (S.EVENTS[e.type] || {}).label || e.type, n: '', rem: [S.entry.describe(e), e.remarks].filter(Boolean).join(' – '), type: e.type };
+      const row = { par, date: e.date, interval: '', event: (S.EVENTS[e.type] || {}).label || e.type, n: '', rem: [S.entry.describe(e), e.remarks].filter(Boolean).join(' – '), type: e.type, ev: e };
       if (e.type === 'mate') {
         const repeatMating = prevMate && lastSvc && U.diff(e.date, lastSvc) <= gap;
         prevMate = e.date;
@@ -33,12 +38,12 @@
           lastSvc = e.date;
         }
         row.n = mgroup(lastSvc);
-        row.rem = `Boar: ${e.boar || '–'}  Due: ${U.fmt(U.addDays(lastSvc, gest))}` + (e.tech ? `  ${e.tech}` : '') + (e.remarks ? '  ' + e.remarks : '');
+        row.rem = `Boar: ${e.boar || '–'}  Due: ${U.fmt(U.addDays(lastSvc, gest))}` + (e.tech ? `  Staff: ${e.tech}` : '') + (e.method && !/^AI$/i.test(e.method) ? `  ${e.method}` : '') + (e.remarks ? '  ' + e.remarks : '');
       } else if (e.type === 'farrow') {
         par++;
         row.par = par;
         row.interval = lastSvc ? U.diff(e.date, lastSvc) : '';
-        row.event = 'Farrowing';
+        row.event = 'Farrowing details';
         row.n = e.liveBorn ?? '';
         row.rem = `BD ${e.stillborn || 0}  BM ${e.mummies || 0}` + (e.birthWeight ? `  Wt ${e.birthWeight}` : '') + (e.location ? '  ' + e.location : '') + (e.remarks ? '  ' + e.remarks : '');
         lastFarrow = e.date;
@@ -68,6 +73,118 @@
     const keys = ['fi', 'gest', 'ba', 'bd', 'mm', 'deaths', 'foster', 'weaned'];
     const avg = {}; keys.forEach((k) => { avg[k] = U.avg(vals.map((x) => x[k])); });
     return { avg, last: L.length ? vals[vals.length - 1] : null, keys };
+  }
+
+  /* ---------- printed sow card (PigWIN layout, two per letter page) ---------- */
+  const PW_CSS = `
+.pw-cards { display: block; }
+.pw { width: 7.5in; height: 4.9in; box-sizing: border-box; padding: 0.06in 0.1in 0.04in; margin: 0 auto 0.2in; background: #fff; color: #000;
+  font: 7pt/1.15 Arial, Helvetica, sans-serif; display: flex; flex-direction: column; gap: 0.05in; break-inside: avoid; page-break-inside: avoid; }
+.pw table { border-collapse: collapse; width: 100%; height: 100%; table-layout: fixed; }
+.pw td, .pw th { border: 1px solid #000; padding: 0 2px; overflow: hidden; white-space: nowrap; vertical-align: middle; font-weight: normal; }
+.pw th { font-size: 6.3pt; letter-spacing: .02em; text-align: center; line-height: 1.05; white-space: normal; }
+.pw-top { display: flex; align-items: flex-end; height: 0.5in; flex: none; }
+.pw-id { font: bold 34pt/1 Arial, sans-serif; margin-left: 0.3in; flex: 1; letter-spacing: -.01em; }
+.pw-farm { text-align: right; font: bold 9pt/1.35 Arial, sans-serif; margin-right: 0.06in; }
+.pw-logo { width: 0.62in; text-align: center; font: bold 7pt Arial, sans-serif; color: #2e8b2e; }
+.pw-logo svg { width: 0.55in; height: 0.3in; display: block; margin: 0 auto -1px; }
+.pw-row { display: flex; gap: 0.04in; flex: none; }
+.pw-lbl { width: 0.2in; flex: none; writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; font: 10.5pt Arial, sans-serif; letter-spacing: .03em; white-space: nowrap; }
+.pw-r1 { height: 1.36in; }
+.pw-farrow { flex: 1; }
+.pw-farrow td.big { font: bold 12pt Arial, sans-serif; text-align: center; }
+.pw-farrow td.rl { font-size: 6.6pt; text-align: center; white-space: normal; line-height: 1.05; }
+.pw-farrow td.sub { font-size: 6.6pt; text-align: center; vertical-align: top; }
+.pw-info { width: 2.0in; flex: none; }
+.pw-info td { text-align: center; vertical-align: top; font-size: 6.3pt; line-height: 1.1; padding-top: 1px; }
+.pw-info td b { display: block; font: bold 8.5pt Arial, sans-serif; margin-top: 1px; }
+.pw-r2 { height: 1.02in; }
+.pw-r2 th, .pw-r3 th { height: 0.15in; }
+.pw-lbl.sm { font-size: 8.5pt; }
+.pw-r3 { height: 1.12in; }
+.pw-box { flex: 1; display: flex; gap: 0.03in; min-width: 0; }
+.pw-box.wide { flex: 1.25; }
+.pw-hist td { font-size: 6.4pt; padding: 0 2px; line-height: 1.1; }
+.pw-hist td.n { text-align: right; }
+.pw-hist th { font-size: 6.3pt; }
+.pw-foot { height: 0.36in; flex: none; margin-left: 0.24in; }
+.pw-foot td { text-align: center; font-size: 6.6pt; line-height: 1.15; letter-spacing: .02em; }
+.pw-foot td b { display: block; font: bold 8.5pt Arial, sans-serif; letter-spacing: 0; }
+@media print {
+  @page { size: letter portrait; margin: 0.35in 0.5in; }
+  .pw { margin: 0 auto; }
+  .pw:nth-child(2n) { break-after: page; page-break-after: always; margin-top: 0.25in; }
+  .pw:last-child { break-after: auto; page-break-after: auto; }
+  .print-sheet.bare { padding: 0 !important; }
+}`;
+  (function injectCss() { if (typeof document === 'undefined' || document.getElementById('pw-css')) return; const st = document.createElement('style'); st.id = 'pw-css'; st.textContent = PW_CSS; document.head.appendChild(st); })();
+  const PIG_SVG = '<svg viewBox="0 0 60 34" aria-hidden="true"><path d="M8 18c-3-1-6 1-5 4" fill="none" stroke="#c8607e" stroke-width="1.6"/><ellipse cx="26" cy="18" rx="17" ry="10.5" fill="#f6adc0" stroke="#c8607e" stroke-width="1.4"/><circle cx="42" cy="15" r="8" fill="#f6adc0" stroke="#c8607e" stroke-width="1.4"/><path d="M38 8l2-6 4 5z" fill="#ef8fa8" stroke="#c8607e" stroke-width="1.2"/><ellipse cx="49" cy="17" rx="3.6" ry="3.2" fill="#ef8fa8" stroke="#c8607e" stroke-width="1.2"/><circle cx="44" cy="13" r="1" fill="#3b2430"/><path d="M15 27v5M21 28v5M31 28v5M37 26v5" stroke="#c8607e" stroke-width="2.6" stroke-linecap="round"/></svg>';
+
+  /** One printed sow card. data=false gives an empty card to fill in by hand. */
+  function card(a, data = true) {
+    const T = (rows, cls) => h('table' + (cls ? '.' + cls : ''), h('tbody', rows));
+    const blankRows = (n, cols) => Array.from({ length: n }, () => h('tr', Array.from({ length: cols }, () => h('td', ' '))));
+    const now = new Date();
+    const r = data && a ? A(a) : null;
+    const gest = S.store.settings.gestationLength;
+    const s = r ? stats(a) : null;
+    const f0 = (v) => (Number.isFinite(v) ? U.num(v, 0) : ''); const f1 = (v) => (Number.isFinite(v) ? U.num(v, 1) : '');
+    const keys = ['fi', 'gest', 'ba', 'bd', 'mm', 'deaths', 'foster', 'weaned'];
+    const avgCells = keys.map((k) => h('td.big', s ? (['fi', 'gest'].includes(k) ? f0(s.avg[k]) : f1(s.avg[k])) : ''));
+    const lastCells = keys.map((k) => h('td.big', s && s.last ? f0(s.last[k]) : ''));
+    const cur = r && r.currentLitter;
+    const svc = r && r.lastService;
+    const svcN = svc ? r.services.filter((x) => x.parity === svc.parity).length : '';
+    const due = r && r.status === 'Served' && svc ? U.addDays(svc.date, gest) : '';
+
+    const head = h('div.pw-top',
+      h('div.pw-id', data && a ? a.id : ''),
+      h('div.pw-farm', h('div', `${S.store.settings.farmNumber || ''} ${S.store.settings.farmName || ''}`.trim()), h('div', `${now.toLocaleDateString('en-US')} ${now.toLocaleTimeString('en-US')}`)),
+      h('div.pw-logo', { html: PIG_SVG + 'SwineOS' }));
+
+    const farrow = T([
+      h('tr', h('th', ''), ['FARROWING INTERVAL', 'GESTATION LENGTH', 'BORN ALIVE', 'BORN DEAD', 'BORN MUMMIFIED', 'PIG DEATHS', 'NET FOSTER', 'PIGS WEANED'].map((t) => h('th', t))),
+      h('tr', h('td.rl', 'LIFETIME AVERAGE'), avgCells),
+      h('tr', h('td.rl', 'LAST LITTER'), lastCells),
+      h('tr', h('td.sub', 'THIS LITTER'), h('td.sub', { colspan: 2 }, 'FARROWING DATE', cur ? h('div', { style: { font: 'bold 9pt Arial' } }, U.fmt(cur.farrowDate)) : null),
+        h('td.big', cur ? cur.liveBorn : ''), h('td.big', cur ? cur.stillborn : ''), h('td.big', cur ? cur.mummies : ''), h('td.sub', { colspan: 3 }, 'LITTER ID / BIRTH WEIGHT', cur && cur.birthWeight ? h('div', { style: { font: 'bold 9pt Arial' } }, String(cur.birthWeight)) : null)),
+      h('tr', h('td.sub', { colspan: 3, style: { textAlign: 'center', verticalAlign: 'middle' } }, 'LAST SERVICE BOAR(S)'), h('td', { colspan: 3, style: { font: 'bold 8pt Arial' } }, svc ? svc.boars.join(', ') : ''),
+        h('td', { style: { textAlign: 'center', font: 'bold 8pt Arial' } }, String(svcN)), h('td.sub', { colspan: 2, style: { verticalAlign: 'middle' } }, 'SERVICE(S)')),
+    ], 'pw-farrow');
+    const cell = (l, v) => h('td', l, h('b', v || ' '));
+    const info = T([
+      h('tr', cell('ALT ID', a && data ? a.altId : ''), cell('DUE TO FARROW', due ? U.fmt(due) : '')),
+      h('tr', cell('HERD ENTRY', a && data ? U.fmt(a.entryDate) : ''), cell('GENETICS', a && data ? a.breed || 'Unknown' : '')),
+      h('tr', cell('LOCATION', r ? r.location : ''), cell('MATING GROUP', svc ? mgroup(svc.date) : '')),
+      h('tr', cell('STATUS', r ? r.status : ''), cell('PARITY', r ? String(r.parity) : '')),
+    ], 'pw-info-t');
+
+    // write-in tables: filled with the current litter's events while the sow is lactating
+    const curEv = (types) => (cur ? r.events.filter((e) => types.includes(e.type) && e.date >= cur.farrowDate).slice(-3) : []);
+    const fill = (evs, f) => { const rows = evs.map((e) => h('tr', f(e).map((v) => h('td', v)))); return rows.concat(blankRows(3 - rows.length, 3)); };
+    const tbl = (heads, rows, widths) => T([h('tr', heads.map((t, i) => h('th', { style: widths ? { width: widths[i] } : null }, t))), ...rows]);
+    const deaths = tbl(['DATE', 'NUMBER', 'REASON'], fill(curEv(['pigdeath']), (e) => [U.fmt(e.date), e.count, e.cause || '']), ['36%', '24%', '40%']);
+    const fosters = tbl(['DATE', 'NUMBER', 'REASON'], fill(curEv(['foster', 'nurse']), (e) => [U.fmt(e.date), e.count, e.type === 'nurse' ? 'Nurse' : '']), ['36%', '24%', '40%']);
+    const weans = tbl(['DATE', 'NUMBER', 'LITTER WEIGHT'], fill(curEv(['partwean', 'wean']), (e) => [U.fmt(e.date), e.count, e.weight || '']), ['36%', '24%', '40%']);
+    const matings = tbl(['DATE', 'BOAR', 'TYPE / STAFF'], blankRows(3, 3), ['27%', '37%', '36%']);
+    const hrows = r ? cardRows(a).filter((x) => x.ev).slice(-9) : [];
+    const hist = T([h('tr', ['PAR', 'DATE', 'EVENT', '#', 'DETAILS'].map((t, i) => h('th', { style: { width: ['9%', '19%', '20%', '10%', '42%'][i] } }, t))),
+      ...hrows.map((x) => h('tr', h('td.n', x.par), h('td.n', U.fmt(x.date)), h('td', x.event.replace(' details', '')), h('td.n', x.n), h('td', x.rem))),
+      ...blankRows(9 - hrows.length, 5)], 'pw-hist');
+
+    const q = [['MATING +21', 'mate', 21], ['MATING +35', 'mate', 35], ['MATING +42', 'mate', 42], ['MATING +60', 'mate', 60], ['DUE DATE -15', 'due', -15], ['DUE DATE -10', 'due', -10], ['DUE DATE -5', 'due', -5]];
+    const foot = T([h('tr', q.map(([l, k, d]) => h('td', l, h('b', due ? dayDate(U.addDays(k === 'mate' ? svc.date : due, d)) : ' '))))]);
+
+    return h('div.pw',
+      head,
+      h('div.pw-row.pw-r1', h('div.pw-lbl', 'FARROWING'), h('div.pw-farrow', farrow), h('div.pw-info', info)),
+      h('div.pw-row.pw-r2', h('div.pw-box', h('div.pw-lbl', 'PIG DEATHS'), deaths), h('div.pw-box', h('div.pw-lbl', 'FOSTERS'), fosters), h('div.pw-box', h('div.pw-lbl.sm', '(PART) WEANS'), weans)),
+      h('div.pw-row.pw-r3', h('div.pw-box', h('div.pw-lbl', 'MATINGS'), matings), h('div.pw-box.wide', h('div.pw-lbl', 'HISTORY'), hist)),
+      h('div.pw-foot', foot));
+  }
+  /** Print preview of PigWIN-style cards, two to a letter page. */
+  function printCardsPreview(list, title, data = true) {
+    return ui().printPreview(title || `Sow cards (${list.length})`, h('div.pw-cards', list.map((a) => card(a, data))), { bare: true, css: PW_CSS });
   }
 
   function open(initial) {
@@ -112,18 +229,19 @@
       h('div.sc2-lists', h('div', availHead, avail), arrows, h('div', selHead, chosen)));
 
     // ---- bottom bar: quick picks
-    const from = ui().dateInput('sc2-from', st.from, { onchange: (e) => { st.from = e.target.value; if (st.filter === 'due') dueToFarrow(); } });
-    const to = ui().dateInput('sc2-to', st.to, { onchange: (e) => { st.to = e.target.value; if (st.filter === 'due') dueToFarrow(); } });
+    const from = ui().dateInput('sc2-from', st.from, { onchange: (e) => { st.from = e.target.value; applyFilter(); } });
+    const to = ui().dateInput('sc2-to', st.to, { onchange: (e) => { st.to = e.target.value; applyFilter(); } });
     const quick = [['Mating +21', 'mate', 21], ['Mating +35', 'mate', 35], ['Mating +42', 'mate', 42], ['Mating +60', 'mate', 60], ['Due date -15', 'due', -15], ['Due date -10', 'due', -10], ['Due date -5', 'due', -5]];
+    // as on PigWIN's card: the date of each check for the sow shown (click to pick every sow with that date in From – To)
+    const quickBtns = quick.map(([l, k, d]) => h('button.sc2-q', { type: 'button', title: k === 'mate' ? `Pick sows served ${d} days before a day in From – To` : `Pick sows due to farrow ${-d} days after a day in From – To`, onclick: () => quickPick(k, d, l) }, h('span.sc2-ql', l), h('span.sc2-qd')));
     const bottom = h('div.sc2-bottom',
-      h('div.sc2-quick', quick.map(([l, k, d]) => h('button.sc2-q', { type: 'button', title: k === 'mate' ? `Sows served ${d} days before a day in From – To` : `Sows due to farrow ${-d} days after a day in From – To`, onclick: () => quickPick(k, d, l) }, l))),
+      h('div.sc2-quick', quickBtns),
       h('div.sc2-filter',
-        h('label', h('span', 'Filter type'), ui().select('sc2-ft', [['all', 'All'], ['gilts', 'Gilts (parity 0)'], ['sows', 'Sows (parity 1+)'], ['due', 'Sows due to farrow']], st.filter, { onchange: (e) => {
+        h('label', h('span', 'Filter type'), ui().select('sc2-ft', FILTERS, st.filter, { onchange: (e) => {
           st.filter = e.target.value;
-          if (st.filter === 'due') {
-            if (st.to <= U.today()) { st.from = U.today(); st.to = U.addDays(U.today(), 7); from.value = st.from; to.value = st.to; }
-            dueToFarrow();
-          } else { st.dueMode = false; renderLists(); }
+          // forward-looking filters start today when the dates are still in the past
+          if (['due', 'wean', 'heat3', 'heat6', 'preg'].includes(st.filter) && st.to <= U.today()) { st.from = U.today(); st.to = U.addDays(U.today(), 7); from.value = st.from; to.value = st.to; }
+          applyFilter();
         } })),
         h('label', h('span', 'From'), from), h('label', h('span', 'To'), to)));
 
@@ -136,13 +254,44 @@
         active: (r) => !r.removed, served: (r) => r.status === 'Served', lactating: (r) => r.status === 'Lactating', open: (r) => r.status === 'Open',
         gilts: (r) => r.status === 'Gilt', removed: (r) => r.removed, all: () => true,
       }[st.sel];
-      return all.filter((a) => f(A(a)) && (!st.group || A(a).location === st.group)).sort((x, y) => U.natCmp(x.id, y.id));
+      const ft = filterFn();
+      const out = all.filter((a) => (st.filter === 'removed' ? true : f(A(a))) && ft(a, A(a)) && (!st.group || A(a).location === st.group));
+      if (st.filter === 'due') return out.sort((x, y) => dueOf(x).localeCompare(dueOf(y)) || U.natCmp(x.id, y.id));
+      return out.sort((x, y) => U.natCmp(x.id, y.id));
+    }
+    const dueOf = (a) => (A(a).lastService ? U.addDays(A(a).lastService.date, S.store.settings.gestationLength) : '');
+    function filterFn() {
+      const inR = (d) => !!d && U.inRange(d, st.from, st.to);
+      const L = S.store.settings.actionLists || {};
+      const served = (r) => r.status === 'Served' && r.lastService && r.lastService.pregCheck !== '-';
+      const plus = (r, d) => (r.lastService ? U.addDays(r.lastService.date, d) : '');
+      const weanAge = S.store.settings.weanAge || 21;
+      return {
+        all: () => true,
+        active: (a, r) => !r.removed,
+        removed: (a, r) => r.removed && inR(r.removedDate),
+        giltsServe: (a, r) => !r.removed && r.status === 'Gilt',
+        open: (a, r) => !r.removed && r.status === 'Open' && inR(r.statusDate),
+        heat3: (a, r) => served(r) && inR(plus(r, 21)),
+        heat6: (a, r) => served(r) && inR(plus(r, 42)),
+        preg: (a, r) => served(r) && inR(plus(r, L.preg1 || 28)),
+        served: (a, r) => r.services.some((x) => inR(x.date)),
+        due: (a, r) => served(r) && inR(plus(r, S.store.settings.gestationLength)),
+        wean: (a, r) => { if (r.status !== 'Lactating' || !r.currentLitter) return false; const d = U.addDays(r.currentLitter.farrowDate, weanAge); return inR(d) || (d < st.from && st.from <= U.today()); },
+      }[st.filter] || (() => true);
+    }
+    function applyFilter() {
+      if (st.from > st.to) { ui().toast('From is after To.', 'error'); return; }
+      st.dueMode = false;
+      renderLists();
+      const first = avail.options[0];
+      if (st.filter !== 'all' && st.filter !== 'active' && first) show(first.value);
     }
     function renderLists() {
       const p = pool();
       const selSet = new Set(st.selected);
       avail.innerHTML = '';
-      p.filter((a) => !selSet.has(a.uid)).forEach((a) => avail.appendChild(h('option', { value: a.uid, selected: st.current && st.current.uid === a.uid ? 'selected' : null }, a.id)));
+      p.filter((a) => !selSet.has(a.uid)).forEach((a) => avail.appendChild(h('option', { value: a.uid, selected: st.current && st.current.uid === a.uid ? 'selected' : null }, st.filter === 'due' ? `${a.id}   due ${U.fmt(dueOf(a)).replace(/\/\d{4}$/, '')}` : a.id)));
       chosen.innerHTML = '';
       const gestL = S.store.settings.gestationLength;
       st.selected.map((u) => S.store.get(u)).filter(Boolean).forEach((a) => {
@@ -171,31 +320,13 @@
         { label: 'Cancel' },
       ] });
     }
-    /** Filter type "Sows due to farrow": served sows whose due date falls in From – To, earliest first. */
-    function dueToFarrow() {
-      if (st.from > st.to) { ui().toast('From is after To.', 'error'); return; }
-      const gest = S.store.settings.gestationLength;
-      const due = (a) => U.addDays(A(a).lastService.date, gest);
-      const hits = S.store.animals().filter((a) => {
-        const r = A(a);
-        return a.sex === 'F' && !r.removed && r.status === 'Served' && r.lastService && r.lastService.pregCheck !== '-' && U.inRange(due(a), st.from, st.to);
-      }).sort((x, y) => (due(x) < due(y) ? -1 : due(x) > due(y) ? 1 : U.natCmp(x.id, y.id)));
-      st.dueMode = true;
-      st.selected = hits.map((a) => a.uid);
-      renderLists();
-      if (hits.length) show(hits[0].uid);
-      ui().toast(`${hits.length} sows due to farrow ${U.fmt(st.from)} – ${U.fmt(st.to)}.`);
-    }
     function quickPick(kind, d, label) {
       st.dueMode = false;
       if (st.from > st.to) { ui().toast('From is after To.', 'error'); return; }
       const gest = S.store.settings.gestationLength;
-      const ft = st.filter;
       const hits = S.store.animals().filter((a) => {
         const r = A(a);
         if (a.sex !== 'F' || r.status !== 'Served' || !r.lastService) return false;
-        if (ft === 'gilts' && r.parity > 0) return false;
-        if (ft === 'sows' && r.parity === 0) return false; // 'due' and 'all' take every served sow
         const ref = kind === 'mate' ? U.addDays(r.lastService.date, d) : U.addDays(U.addDays(r.lastService.date, gest), d);
         return U.inRange(ref, st.from, st.to);
       }).sort((x, y) => U.natCmp(x.id, y.id));
@@ -206,7 +337,7 @@
     }
     function printCards() {
       const cur = st.current; const pl = pool();
-      const o = { which: st.selected.length ? 'selected' : 'one', data: true, template: true, sort: 'entry', layout: 'half' };
+      const o = { which: st.selected.length ? 'selected' : 'one', data: true, template: true, sort: 'entry', layout: 'pw' };
       const radio = (name, val, label, checked) => h('label.blk', h('input', { type: 'radio', name, checked, onchange: () => { o[name] = val; } }), ' ', label);
       const chk = (key, label) => h('label.blk', h('input', { type: 'checkbox', checked: o[key], onchange: (e) => { o[key] = e.target.checked; } }), ' ', label);
       const body = h('div.sc-print',
@@ -219,7 +350,7 @@
           radio('sort', 'id', 'ID', false), radio('sort', 'stage', 'Production stage', false),
           radio('sort', 'location', 'Location', false), radio('sort', 'entry', 'According to entry', true),
           radio('sort', 'mating', 'Mating date', false), radio('sort', 'group', 'Mating group', false))),
-        h('fieldset', h('legend', 'Sow card layout options'), ui().select('sc-layout', [['half', 'Half: Standard / Event history'], ['full', 'Full: Standard / Event history'], ['lt', 'Half: Lifetime summary']], 'half', { onchange: (e) => { o.layout = e.target.value; } })));
+        h('fieldset', h('legend', 'Sow card layout options'), ui().select('sc-layout', [['pw', 'Standard sow card (2 per letter page)'], ['full', 'Event history list'], ['lt', 'Lifetime summary']], 'pw', { onchange: (e) => { o.layout = e.target.value; } })));
       const build = () => {
         let list = o.which === 'one' ? [cur] : o.which === 'selected' ? st.selected.map((u) => S.store.get(u)) : pl;
         list = list.filter(Boolean);
@@ -230,9 +361,12 @@
         if (key) list = list.slice().sort((x, y) => U.natCmp(key(x), key(y)) || U.natCmp(x.id, y.id));
         return list;
       };
+      const preview = (list) => (o.layout === 'pw'
+        ? printCardsPreview(list.slice(0, 500), `Sow cards (${list.length})`, o.data)
+        : ui().printPreview(`Sow cards (${list.length})`, h('div.cards', list.slice(0, 500).map((a) => printable(a, o)))));
       ui().modal({ title: 'Sow card', width: 460, body, buttons: [
-        { label: 'Preview', primary: true, onClick: () => { const list = build(); if (!list.length) { ui().toast('No sows to print.'); return true; } ui().printPreview(`Sow cards (${list.length})`, h('div.cards' + (o.layout === 'half' ? '.half' : ''), list.slice(0, 500).map((a) => printable(a, o)))); } },
-        { label: 'Print', cls: 'print-btn', onClick: () => { const list = build(); if (!list.length) return true; ui().printPreview(`Sow cards (${list.length})`, h('div.cards' + (o.layout === 'half' ? '.half' : ''), list.slice(0, 500).map((a) => printable(a, o)))); setTimeout(() => { document.body.classList.add('printing'); window.print(); setTimeout(() => document.body.classList.remove('printing'), 500); }, 300); } },
+        { label: 'Preview', primary: true, onClick: () => { const list = build(); if (!list.length) { ui().toast('No sows to print.'); return true; } preview(list); } },
+        { label: 'Print', cls: 'print-btn', onClick: () => { const list = build(); if (!list.length) return true; preview(list); setTimeout(() => { document.body.classList.add('printing'); window.print(); setTimeout(() => document.body.classList.remove('printing'), 500); }, 300); } },
         { label: 'Cancel' },
       ] });
     }
@@ -251,6 +385,7 @@
       const a = st.current;
       statBox.innerHTML = ''; hist.innerHTML = ''; info.innerHTML = ''; boarRow.innerHTML = '';
       if (!a) {
+        quickBtns.forEach((b) => { b.querySelector('.sc2-qd').textContent = ''; });
         title.textContent = 'Sow card';
         lastEntry.textContent = 'Pick a sow from the Available list';
         info.append(cell('Due to farrow date'), cell('Alt ID'), cell('Arrival date'), cell('Genetics'), cell('Location'), cell('Mating group'), cell('Status'), cell('Parity'));
@@ -259,6 +394,10 @@
       }
       const r = A(a);
       const gest = S.store.settings.gestationLength;
+      quick.forEach(([, k, d], i) => {
+        const base = r.status === 'Served' && r.lastService ? (k === 'mate' ? r.lastService.date : U.addDays(r.lastService.date, gest)) : '';
+        quickBtns[i].querySelector('.sc2-qd').textContent = base ? dayDate(U.addDays(base, d)) : '';
+      });
       const lastEv = r.events.length ? r.events[r.events.length - 1].date : (a.entryDate || a.arrivalDate);
       title.textContent = `Sow card - ${a.id}`;
       lastEntry.textContent = `Last data entry: ${U.fmt(lastEv) || '–'}`;
@@ -305,5 +444,5 @@
     return win;
   }
 
-  S.sowCard = { open, cardRows };
+  S.sowCard = { open, cardRows, card, printCardsPreview, PW_CSS };
 })(window.SOS);

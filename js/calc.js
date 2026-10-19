@@ -439,7 +439,7 @@
         pigWeanWeight: l.weanWeightCount ? l.weanWeight / l.weanWeightCount : null,
         birthWeight: l.birthWeight, wsi: ns ? ns.wsi : null, location: l.location || '', boar: l.boar || '',
         nextOutcome: ns ? ns.outcome : null,
-        month: l.farrowDate.slice(0, 7), week: U.isoWeek(l.farrowDate),
+        month: l.farrowDate.slice(0, 7), week: U.pigWeek(l.farrowDate),
       };
     });
   }

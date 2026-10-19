@@ -604,9 +604,12 @@
         histHost.append(g, h('div.lt-total', `Lifetime: ${lt.litters} litters · TB ${lt.tb} · BA ${lt.ba} (${U.num(lt.ba / (lt.litters || 1))}/litter) · weaned ${lt.weaned} (${U.num(lt.weaned / (lt.litters || 1))}/litter)`));
         return;
       }
-      const rows = historyRows(a);
+      // PigWIN layout: mating group in #, "Boar … Due … Staff …"; farrowings in yellow. Hidden event types are left out.
+      const hidden = histHidden();
+      const rows = S.sowCard.cardRows(a).filter((x) => !x.type || !hidden.has(x.type)).map((x) => ({ ...x, count: x.n, remarks: x.rem }));
       const g = ui().grid({
-        cls: 'hist-grid', rows, rowKey: (x, i) => (x.ev ? x.ev.eid : 'a' + i), selectedKey: st.histSel && st.histSel.eid,
+        cls: 'hist-grid', rows, rowKey: (x, i) => (x.ev ? x.ev.eid : 'a' + i), selectedKey: st.histSel && st.histSel.eid, rowClass: (x) => (x.type === 'farrow' ? 'farrow' : ''),
+        emptyText: hidden.size ? 'No events (some event types are hidden: right-click to show them)' : 'No events',
         onRowClick: (x) => { st.histSel = x.ev || null; focusId(); }, onRowDblClick: (x) => { st.histSel = x.ev || null; editSel(); },
         onRowContext: (x, cx, cy) => historyMenu(x, cx, cy),
         columns: [
@@ -619,6 +622,23 @@
       const scroller = g; requestAnimationFrame(() => { scroller.scrollTop = scroller.scrollHeight; });
     }
     /* right-click menus */
+    const HIST_TYPES = [['vboar', 'V-boar'], ['synch', 'Synchronise'], ['heat', 'Heat'], ['mate', 'Mating'], ['preg', 'Pregnancy check'], ['abort', 'Abortion'], ['farrow', 'Farrowing'],
+      ['pigdeath', 'Death'], ['foster', 'Foster'], ['partwean', 'PartWean'], ['wean', 'Weaning'], ['nurse', 'Nurse details'], ['editid', 'Tattoo / ID change'], ['location', 'Location'],
+      ['condition', 'Condition'], ['disease', 'Remark / disorder'], ['remove', 'Removal']];
+    function histHidden() { try { return new Set(JSON.parse(localStorage.getItem('swineos.histHidden') || '[]')); } catch (e) { return new Set(); } }
+    function toggleHidden(t) {
+      const hs = histHidden(); if (hs.has(t)) hs.delete(t); else hs.add(t);
+      try { localStorage.setItem('swineos.histHidden', JSON.stringify([...hs])); } catch (e) { /* storage blocked */ }
+      renderHistory();
+    }
+    function showEventsMenu() {
+      const hs = histHidden();
+      return { label: 'Show events', items: [
+        ...HIST_TYPES.map(([t, l]) => ({ label: l, checked: !hs.has(t), onClick: () => toggleHidden(t) })),
+        '-',
+        { label: 'Show all', onClick: () => { try { localStorage.removeItem('swineos.histHidden'); } catch (e) { /* ignore */ } renderHistory(); } },
+      ] };
+    }
     function newEventItems(a) {
       const r = A(a);
       return tabs.filter((t) => t !== 'entry' && (a.sex !== 'M' || ['location', 'editid', 'disease', 'remove'].includes(t)))
@@ -633,7 +653,8 @@
         ev ? { label: `Edit ${label}…`, onClick: editSel } : { label: 'Edit animal details…', onClick: () => openDetails(a, (u) => { st.sel = u; refresh(); }) },
         ev ? { label: `Delete ${label}…`, danger: true, onClick: delSel } : null,
         '-',
-        ...newEventItems(a),
+        { label: 'New event', items: newEventItems(a) },
+        showEventsMenu(),
         '-',
         { label: 'Animal details…', onClick: () => openDetails(a, (u) => { st.sel = u; refresh(); }) },
         { label: 'Sow card', onClick: () => S.sowCard.open(a) },
@@ -644,7 +665,7 @@
       ui().contextMenu(cx, cy, [
         st.tab === 'entry' ? null : { label: `Enter ${(S.EVENTS[st.tab] || {}).label || TAB_LABEL[st.tab]} for ${a.id}…`, onClick: () => { select(a, true); enter(); } },
         st.tab === 'entry' ? null : '-',
-        ...newEventItems(a),
+        { label: 'New event', items: newEventItems(a) },
         '-',
         { label: 'Animal details…', onClick: () => openDetails(a, (u) => { st.sel = u; refresh(); }) },
         { label: 'Sow card', onClick: () => S.sowCard.open(a) },

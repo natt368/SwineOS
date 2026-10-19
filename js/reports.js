@@ -31,7 +31,7 @@
       '|',
       { icon: 'graph', label: 'Graph', onClick: () => { if (last && last.chart) ui().modal({ title: 'Graph – ' + title, body: last.chart(), width: 860, buttons: [{ label: 'Close', primary: true }] }); else ui().toast('This report has no graph.'); } },
       '|',
-      { icon: 'print', label: 'Print', onClick: () => last && ui().printPreview(title, last.node.cloneNode(true)) },
+      { icon: 'print', label: 'Print', onClick: () => last && ui().printPreview(title, last.node.cloneNode(true), last.printBare ? { bare: true, css: S.sowCard.PW_CSS } : {}) },
       { icon: 'export', label: 'Export', onClick: () => {
         if (!last) return;
         // reports without their own export: save the tables shown on screen
@@ -565,7 +565,7 @@
       const g = {}; sv.forEach((s) => { const k = U.weekStart(s.date); (g[k] = g[k] || []).push(s); });
       const rows = Object.keys(g).sort().map((k) => {
         const ss = g[k]; const f = ss.filter((s) => s.outcome === 'farrow').length; const pend = ss.filter((s) => s.outcome === 'pending' || s.outcome === 'unknown').length; const fail = ss.length - f - pend;
-        const r = [U.fmt(k), U.isoWeek(k), ss.length, ss.filter((s) => s.isGilt).length, ss.filter((s) => !s.isFirst).length, f, fail, pend, n1(U.pct(f, ss.length - pend)), n1(U.pct(ss.length - fail, ss.length))];
+        const r = [U.fmt(k), U.pigWeek(k), ss.length, ss.filter((s) => s.isGilt).length, ss.filter((s) => !s.isFirst).length, f, fail, pend, n1(U.pct(f, ss.length - pend)), n1(U.pct(ss.length - fail, ss.length))];
         if (pend) r._cls = 'pending';
         return r;
       });
@@ -681,7 +681,8 @@
   }
 
   /* ---- sow cards & sheets ---- */
-  function sowCard(a) {
+  /** Old-style card: animal header + full event list (Sow card print option "Event history list"). */
+  function sowCardList(a) {
     const r = A(a);
     const hist = S.entry.historyRows(a);
     const lt = S.entry.lifetime(a);
@@ -697,7 +698,7 @@
       let list;
       if (ids.text.trim()) list = ids.text.split(/[\s,;]+/).filter(Boolean).map((t) => S.store.findById(t)).filter(Boolean);
       else list = S.store.animals().filter((a) => a.sex === 'F' && !A(a).removed && A(a).status === ids.status).filter((a) => !ids.due || ids.status !== 'Served' || U.diff(U.addDays(A(a).lastService.date, S.store.settings.gestationLength), U.today()) <= 10).sort((x, y) => U.natCmp(x.id, y.id));
-      return { node: h('div.cards', list.length ? list.slice(0, 200).map(sowCard) : h('p.msg', 'No sows selected. Type IDs or pick a status below.')) };
+      return { node: list.length ? h('div.pw-cards', list.slice(0, 200).map((a) => S.sowCard.card(a))) : h('p.msg', 'No sows selected. Type IDs or pick a status below.'), printBare: true };
     }, extra: (panel, p, run) => {
       panel.append(ui().field('Sow IDs', ui().input('sc-ids', '', { placeholder: 'e.g. 1001 1002 1003', onchange: (e) => { ids.text = e.target.value; run(); } })),
         ui().field('or status', ui().select('sc-st', ['Served', 'Lactating', 'Open', 'Gilt'], 'Served', { onchange: (e) => { ids.status = e.target.value; run(); } })),
@@ -902,7 +903,7 @@
   function boarUsage() {
     return reportWindow({ title: 'Boar usage', subtitle: 'Matings per boar per week', defaults: { begin: U.addDays(U.today(), -12 * 7) }, build: (p) => {
       const g = {}; const weeks = new Set();
-      S.store.animals().forEach((a) => A(a).events.forEach((e) => { if (e.type === 'mate' && U.inRange(e.date, p.begin, p.end)) { const w = U.isoWeek(e.date); weeks.add(w); const b = e.boar || '(none)'; g[b] = g[b] || {}; g[b][w] = (g[b][w] || 0) + 1; } }));
+      S.store.animals().forEach((a) => A(a).events.forEach((e) => { if (e.type === 'mate' && U.inRange(e.date, p.begin, p.end)) { const w = U.pigWeek(e.date); weeks.add(w); const b = e.boar || '(none)'; g[b] = g[b] || {}; g[b][w] = (g[b][w] || 0) + 1; } }));
       const wk = [...weeks].sort();
       const rows = Object.keys(g).sort(U.natCmp).map((b) => [b, ...wk.map((w) => g[b][w] || ''), U.sum(Object.values(g[b]))]);
       const t = table(['Boar', ...wk.map((w) => w.slice(5)), 'Total'], rows);
@@ -1114,5 +1115,5 @@
     return win;
   }
 
-  S.reports = { menu, herdPerformance, populationDynamics: () => S.app.show(populationDynamics), dueVaccinations, sowCard, table, exportData, logReport, vaccinationsEntry: () => vaccinations({ entry: true }), reportWindow, littersIn, weanedIn, servicesIn };
+  S.reports = { menu, herdPerformance, populationDynamics: () => S.app.show(populationDynamics), dueVaccinations, sowCard: sowCardList, table, exportData, logReport, vaccinationsEntry: () => vaccinations({ entry: true }), reportWindow, littersIn, weanedIn, servicesIn };
 })(window.SOS);

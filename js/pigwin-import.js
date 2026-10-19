@@ -213,6 +213,7 @@
         farmName: (farm && farm.Nam) || opts.farmName,
         farmNumber: opts.farmNumber,
         gestationLength: zg.GemDrgTyd || 115,
+        weanAge: num(sz.SpnLft),
         targets,
         lists: {
           cullReasons: [...lists.cullReasons].sort(), deathReasons: [...lists.deathReasons].sort(), pigDeathCauses: [...lists.pigDeathCauses].sort(),

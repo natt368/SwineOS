@@ -37,6 +37,7 @@
         ui().field('Farm name', txt(s, 'farmName')),
         ui().field('Farm number', txt(s, 'farmNumber')),
         ui().field('Gestation length (days)', num(s, 'gestationLength', { min: 105, max: 125 }), 'Used for due dates'),
+        ui().field('Weaning age (days)', num(s, 'weanAge', { min: 10, max: 60 }), 'Used for Sows to be weaned'),
         ui().field('Target lactation (days)', num(s, 'targetLactation', { min: 10, max: 40 })),
         ui().field('Gilt age for service list (days)', num(s, 'giltEntryAge', { min: 120, max: 400 })),
         ui().field('Matings up to … days after the first mating are one service', num(s, 'serviceWindowDays', { min: 1, max: 10 }), 'PigWIN uses 6: a mating 7 or more days after the first one is a repeat service.'),
@@ -120,7 +121,7 @@
     const cur = S.store.settings;
     const lists = { ...cur.lists };
     for (const [k, v] of Object.entries(res.settings.lists)) lists[k] = [...new Set([...(cur.lists[k] || []), ...v])];
-    const settings = { ...cur, farmName: res.settings.farmName || cur.farmName, farmNumber: res.settings.farmNumber || cur.farmNumber, gestationLength: res.settings.gestationLength || cur.gestationLength, targets: { ...cur.targets, ...(res.settings.targets || {}) }, lists, demo: false };
+    const settings = { ...cur, farmName: res.settings.farmName || cur.farmName, farmNumber: res.settings.farmNumber || cur.farmNumber, gestationLength: res.settings.gestationLength || cur.gestationLength, weanAge: res.settings.weanAge || cur.weanAge, targets: { ...cur.targets, ...(res.settings.targets || {}) }, lists, demo: false };
     await S.store.replaceAll(res.animals, settings, progress(prog));
     S.model.resetCache();
     S.store.log(`Imported PigWIN backup ${file.name}: ${st.animals} animals, ${st.events} events`);

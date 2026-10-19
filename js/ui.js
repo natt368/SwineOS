@@ -164,32 +164,59 @@
   }
 
   /* ---------- right-click menu ---------- */
-  /** items: [{ label, onClick, disabled, danger }] or '-' for a separator. */
+  /** items: [{ label, onClick, disabled, danger, checked, items: [sub-items] }] or '-' for a separator. */
   function contextMenu(x, y, items) {
-    U.$$('.ctx-menu').forEach((m) => m.close());
-    const menu = h('div.ctx-menu', { role: 'menu' });
-    const btns = [];
-    items.filter(Boolean).forEach((it) => {
-      if (it === '-') { menu.appendChild(h('div.ctx-sep')); return; }
-      const b = h('button.ctx-item' + (it.danger ? '.danger' : ''), { type: 'button', role: 'menuitem', disabled: !!it.disabled, onclick: () => { close(); it.onClick(); } }, it.label);
-      btns.push(b); menu.appendChild(b);
-    });
-    const onDown = (e) => { if (!menu.contains(e.target)) close(); };
+    U.$$('.ctx-menu').forEach((m) => m.remove());
+    const menus = [];
+    function closeAll() {
+      menus.forEach((m) => m.remove()); menus.length = 0;
+      document.removeEventListener('pointerdown', onDown, true); document.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('resize', closeAll); window.removeEventListener('blur', closeAll);
+    }
+    function place(menu, px, py, alt) {
+      document.body.appendChild(menu);
+      const r = menu.getBoundingClientRect();
+      let left = px; if (left + r.width > innerWidth - 4) left = alt !== undefined ? alt - r.width : innerWidth - r.width - 4;
+      menu.style.left = Math.max(4, left) + 'px';
+      menu.style.top = Math.max(4, Math.min(py, innerHeight - r.height - 4)) + 'px';
+    }
+    function build(list, level) {
+      const menu = h('div.ctx-menu', { role: 'menu' });
+      menu.close = closeAll;
+      list.filter(Boolean).forEach((it) => {
+        if (it === '-') { menu.appendChild(h('div.ctx-sep')); return; }
+        const b = h('button.ctx-item' + (it.danger ? '.danger' : '') + (it.items ? '.has-sub' : ''), { type: 'button', role: 'menuitem', disabled: !!it.disabled },
+          h('span.ctx-check', it.checked === undefined ? '' : it.checked ? '✓' : ''), h('span.ctx-label', it.label), it.items ? h('span.ctx-arrow', '▸') : null);
+        const openSub = () => {
+          while (menus.length > level + 1) menus.pop().remove();
+          if (!it.items) return;
+          const sub = build(it.items, level + 1);
+          const r = b.getBoundingClientRect();
+          place(sub, r.right - 2, r.top - 4, r.left + 2);
+          menus.push(sub);
+        };
+        b.addEventListener('mouseenter', openSub);
+        b.addEventListener('click', () => { if (it.items) { openSub(); const f = menus[level + 1] && menus[level + 1].querySelector('.ctx-item:not(:disabled)'); if (f) f.focus(); return; } closeAll(); it.onClick(); });
+        menu.appendChild(b);
+      });
+      return menu;
+    }
+    const onDown = (e) => { if (!menus.some((m) => m.contains(e.target))) closeAll(); };
     const onKey = (e) => {
-      const live = btns.filter((b) => !b.disabled); const i = live.indexOf(document.activeElement);
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+      const cur = menus.find((m) => m.contains(document.activeElement)) || menus[menus.length - 1];
+      const live = cur ? [...cur.querySelectorAll('.ctx-item:not(:disabled)')] : []; const i = live.indexOf(document.activeElement);
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeAll(); }
       else if (e.key === 'ArrowDown') { e.preventDefault(); (live[i + 1] || live[0]).focus(); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); (live[i - 1] || live[live.length - 1]).focus(); }
+      else if (e.key === 'ArrowRight' && document.activeElement && document.activeElement.classList.contains('has-sub')) { e.preventDefault(); document.activeElement.click(); }
+      else if (e.key === 'ArrowLeft' && menus.length > 1 && cur !== menus[0]) { e.preventDefault(); const idx = menus.indexOf(cur); menus.splice(idx).forEach((m) => m.remove()); const f = menus[menus.length - 1].querySelector('.ctx-item.has-sub'); if (f) f.focus(); }
     };
-    function close() { if (!menu.isConnected) return; menu.remove(); document.removeEventListener('pointerdown', onDown, true); document.removeEventListener('keydown', onKey, true); window.removeEventListener('resize', close); window.removeEventListener('blur', close); }
-    menu.close = close;
-    document.body.appendChild(menu);
-    const r = menu.getBoundingClientRect();
-    menu.style.left = Math.max(4, Math.min(x, innerWidth - r.width - 4)) + 'px';
-    menu.style.top = Math.max(4, Math.min(y, innerHeight - r.height - 4)) + 'px';
-    setTimeout(() => { document.addEventListener('pointerdown', onDown, true); document.addEventListener('keydown', onKey, true); window.addEventListener('resize', close); window.addEventListener('blur', close); }, 0);
-    const first = btns.find((b) => !b.disabled); if (first) first.focus({ preventScroll: true });
-    return menu;
+    const root = build(items, 0);
+    place(root, x, y);
+    menus.push(root);
+    setTimeout(() => { document.addEventListener('pointerdown', onDown, true); document.addEventListener('keydown', onKey, true); window.addEventListener('resize', closeAll); window.addEventListener('blur', closeAll); }, 0);
+    const first = root.querySelector('.ctx-item:not(:disabled)'); if (first) first.focus({ preventScroll: true });
+    return root;
   }
 
   /* ---------- simple SVG charts ---------- */
@@ -272,13 +299,14 @@
   }
 
   /** Open printable HTML (report preview window). Falls back to an in-page preview. */
-  function printPreview(title, contentNode) {
-    const body = h('div.print-sheet', h('h2', title), h('div.print-farm', `${S.store.settings.farmNumber} ${S.store.settings.farmName}  ·  printed ${U.fmt(U.today())}`), contentNode);
+  /** opts.bare: no title lines (the content brings its own, e.g. sow cards); opts.css: extra styles for "Save as file". */
+  function printPreview(title, contentNode, opts = {}) {
+    const body = h('div.print-sheet' + (opts.bare ? '.bare' : ''), opts.bare ? null : h('h2', title), opts.bare ? null : h('div.print-farm', `${S.store.settings.farmNumber} ${S.store.settings.farmName}  ·  printed ${U.fmt(U.today())}`), contentNode);
     const m = modal({ title: 'Preview – ' + title, body, width: 980, cls: 'preview', buttons: [
       { label: 'Print', primary: true, manual: true, cls: 'print-btn', onClick: () => { document.body.classList.add('printing'); window.print(); setTimeout(() => document.body.classList.remove('printing'), 500); return true; } },
       { label: 'Save as file', manual: true, onClick: () => {
         const css = 'body{font:12px Arial,sans-serif;margin:16px}table{border-collapse:collapse;margin:4px 0 12px}th,td{border:1px solid #999;padding:2px 6px;white-space:nowrap}th{background:#eee}h2{margin:0}h4{margin:12px 0 2px;color:#000080}.write{min-width:150px}.sowcard{border:2px solid #000;padding:8px;margin-bottom:12px;page-break-inside:avoid}.sc-line{border-bottom:1px solid #999;height:22px}.al-sec{page-break-inside:avoid}';
-        const html = `<!doctype html><html><head><meta charset="utf-8"><title>${U.esc(title)}</title><style>${css}</style></head><body>${body.outerHTML}</body></html>`;
+        const html = `<!doctype html><html><head><meta charset="utf-8"><title>${U.esc(title)}</title><style>${css}${opts.css || ''}</style></head><body>${body.outerHTML}</body></html>`;
         saveFile(title.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + U.today() + '.html', html, 'text/html');
         return true;
       } },

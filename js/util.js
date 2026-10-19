@@ -49,6 +49,20 @@ window.SOS = window.SOS || {};
       const wk = 1 + Math.round(((dt - firstThu) / DAY - 3 + ((firstThu.getUTCDay() + 6) % 7)) / 7);
       return `${dt.getUTCFullYear()}-W${String(wk).padStart(2, '0')}`;
     },
+    /**
+     * Week number as PigWIN counts it (mating groups "26-25"): weeks start on Monday, and week 1 is the week
+     * holding 1 January only when that is a Monday, Tuesday or Wednesday; otherwise week 1 starts the next Monday.
+     * (ISO puts Thursday 1 January in week 1, so in years like 2026 PigWIN's numbers are one lower.)
+     */
+    pigWeek(iso) {
+      const n = U.d2n(iso);
+      const start = (y) => { const j = U.d2n(`${y}-01-01`); const dow = (new Date(j * DAY).getUTCDay() + 6) % 7; return dow <= 2 ? j - dow : j + 7 - dow; };
+      let y = Number(iso.slice(0, 4));
+      if (n < start(y)) y -= 1; else if (n >= start(y + 1)) y += 1;
+      return `${y}-W${String(Math.floor((n - start(y)) / 7) + 1).padStart(2, '0')}`;
+    },
+    /** Mating group "yy-ww" for a service date. */
+    matingGroup(iso) { const w = U.pigWeek(iso); return w.slice(2, 4) + '-' + w.slice(6); },
     /** Monday of the week containing iso. */
     weekStart(iso) {
       const n = U.d2n(iso);

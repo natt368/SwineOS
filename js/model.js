@@ -8,6 +8,7 @@
     farmName: 'My Sow Farm',
     farmNumber: '0000001',
     gestationLength: 115,
+    weanAge: 21, // planned weaning age (days): Sows to be weaned
     targetLactation: 21,
     giltEntryAge: 200,
     serviceWindowDays: 6, // as PigWIN: matings up to this many days after a service's first mating belong to it

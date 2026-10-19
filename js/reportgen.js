@@ -75,7 +75,7 @@
     if (d.kind === 'servicegroup') {
       const gest = S.store.settings.gestationLength;
       const rows = [];
-      all.forEach((a) => A(a).services.forEach((s) => { if (U.inRange(s.date, b, end)) rows.push([U.isoWeek(s.date).slice(2).replace('-W', '-'), a.id, s.parity, U.fmt(s.date), s.matings, s.boars.join(', '), s.tech || '', U.fmt(U.addDays(s.date, gest)), s.date]); }));
+      all.forEach((a) => A(a).services.forEach((s) => { if (U.inRange(s.date, b, end)) rows.push([U.matingGroup(s.date), a.id, s.parity, U.fmt(s.date), s.matings, s.boars.join(', '), s.tech || '', U.fmt(U.addDays(s.date, gest)), s.date]); }));
       rows.sort((x, y) => (x[8] < y[8] ? -1 : x[8] > y[8] ? 1 : U.natCmp(x[1], y[1])));
       return { title, head: ['Group', 'Sow', 'Par', 'Served', 'Matings', 'Boar(s)', 'Technician', 'Due'], rows: rows.map((r) => r.slice(0, 8)), total: `${rows.length} services` };
     }

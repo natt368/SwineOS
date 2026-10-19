@@ -198,13 +198,16 @@ button { cursor: pointer; }
 .grid tbody tr { cursor: default; -webkit-touch-callout: none; }
 /* right-click menu */
 .ctx-menu { position: fixed; z-index: 2000; min-width: 210px; max-height: calc(100vh - 8px); overflow-y: auto; background: #fff; border: 1px solid #8a8a8a; box-shadow: 2px 3px 10px rgba(0,0,0,.3); padding: 3px 0; font: 13px var(--ui); }
-.ctx-item { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 5px 18px 5px 14px; color: var(--ink); white-space: nowrap; cursor: default; }
+.ctx-item { display: flex; align-items: center; width: 100%; text-align: left; background: none; border: 0; padding: 5px 14px 5px 4px; color: var(--ink); white-space: nowrap; cursor: default; }
+.ctx-check { width: 18px; text-align: center; flex: none; }
+.ctx-label { flex: 1; }
+.ctx-arrow { margin-left: 18px; }
 .ctx-item:hover:not(:disabled), .ctx-item:focus-visible { background: #0078d7; color: #fff; outline: none; }
 .ctx-item:disabled { color: #9a9a9a; }
 .ctx-item.danger:not(:disabled) { color: #b3261e; }
 .ctx-item.danger:hover:not(:disabled), .ctx-item.danger:focus-visible { background: #b3261e; color: #fff; }
 .ctx-sep { height: 1px; background: #d6d6d6; margin: 3px 0; }
-@media (pointer: coarse) { .ctx-item { padding: 10px 20px 10px 16px; font-size: 15px; } }
+@media (pointer: coarse) { .ctx-item { padding: 10px 16px 10px 6px; font-size: 15px; } }
 .grid tr.st-removed td { color: #8a8a8a; }
 .grid tr.due td { background: #fff3c4; }
 .rep-grid { max-height: none; }
@@ -389,7 +392,8 @@ button { cursor: pointer; }
 .sc2-grid .grid { font: bold 14px var(--bold); }
 .sc2-grid .grid th { background: #f0f0f0; color: #000; font-weight: bold; }
 .sc2-grid .grid td { color: #fff; border-bottom: 0; padding: 1px 6px; }
-.sc2-grid .grid tr.farrow td { color: #ffff3c; }
+.sc2-grid .grid tr.farrow td, .hist-grid .grid tr.farrow td { color: #ffff3c; }
+.hist-grid .grid tr.farrow.sel td { color: #000; }
 .sc2-grid .grid tr.sel td { background: #fff; color: #000; }
 .sc2-grid .grid th:last-child, .sc2-grid .grid td:last-child { width: 100%; }
 .sc2-right { width: 355px; background: var(--teal); color: #fff; display: flex; flex-direction: column; gap: 10px; padding-bottom: 10px; border-left: 2px solid #c0c0c0; }
@@ -408,7 +412,8 @@ button { cursor: pointer; }
 .abtn .ico { width: 18px; height: 18px; }
 .sc2-bottom { background: var(--navy); color: #fff; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px)); border-top: 3px solid #c0c0c0; }
 .sc2-quick { display: flex; flex-wrap: wrap; gap: 4px 6px; flex: 1; }
-.sc2-q { background: transparent; border: 1px solid transparent; color: #fff; font: bold 16px var(--bold); padding: 4px 10px; }
+.sc2-q { background: transparent; border: 1px solid transparent; color: #fff; font: bold 16px var(--bold); padding: 4px 10px; display: inline-flex; flex-direction: column; align-items: center; line-height: 1.2; }
+.sc2-qd { font-size: 15px; min-height: 18px; }
 .sc2-q:hover { border-color: #fff; background: #1a1aa0; }
 .sc2-filter { display: grid; gap: 4px; }
 .sc2-filter label { display: flex; align-items: center; gap: 8px; font: bold 15px var(--bold); }
