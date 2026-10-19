@@ -195,7 +195,16 @@ button { cursor: pointer; }
 .grid td { padding: 1px 6px; white-space: nowrap; border-bottom: 1px solid #eee; }
 .grid tr.sel td { background: #0078d7; color: #fff; }
 .grid tr.empty td { color: #777; font-style: italic; padding: 8px; }
-.grid tbody tr { cursor: default; }
+.grid tbody tr { cursor: default; -webkit-touch-callout: none; }
+/* right-click menu */
+.ctx-menu { position: fixed; z-index: 2000; min-width: 210px; max-height: calc(100vh - 8px); overflow-y: auto; background: #fff; border: 1px solid #8a8a8a; box-shadow: 2px 3px 10px rgba(0,0,0,.3); padding: 3px 0; font: 13px var(--ui); }
+.ctx-item { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 5px 18px 5px 14px; color: var(--ink); white-space: nowrap; cursor: default; }
+.ctx-item:hover:not(:disabled), .ctx-item:focus-visible { background: #0078d7; color: #fff; outline: none; }
+.ctx-item:disabled { color: #9a9a9a; }
+.ctx-item.danger:not(:disabled) { color: #b3261e; }
+.ctx-item.danger:hover:not(:disabled), .ctx-item.danger:focus-visible { background: #b3261e; color: #fff; }
+.ctx-sep { height: 1px; background: #d6d6d6; margin: 3px 0; }
+@media (pointer: coarse) { .ctx-item { padding: 10px 20px 10px 16px; font-size: 15px; } }
 .grid tr.st-removed td { color: #8a8a8a; }
 .grid tr.due td { background: #fff3c4; }
 .rep-grid { max-height: none; }
@@ -203,7 +212,8 @@ button { cursor: pointer; }
 /* ---------- sow data entry ---------- */
 .entry-win { min-height: 100vh; }
 @media (min-width: 901px) {
-  .entry-win { height: 100vh; min-height: 0; }
+  /* fixed to the screen height so the history scrolls inside its box (flex: 1 let it grow with the content) */
+  .entry-win { flex: none; height: 100vh; min-height: 0; }
   .demo-banner + .entry-win { height: calc(100vh - 25px); }
   .entry-body, .entry-left { min-height: 0; overflow: hidden; }
   .entry-right { overflow: auto; }

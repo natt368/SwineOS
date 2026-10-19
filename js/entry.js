@@ -491,13 +491,26 @@
       { label: 'Arrival date', value: (a) => U.fmt(a.arrivalDate), sort: (a) => a.arrivalDate || '' },
       { label: 'Birth date', value: (a) => U.fmt(a.birthDate), sort: (a) => a.birthDate || '' },
     ].filter(Boolean);
-    const list = ui().grid({ columns: listCols, rows: [], cls: 'list-grid', rowKey: (a) => a.uid, rowClass: (a) => statusCls(A(a)), onRowClick: (a) => select(a, true), onRowDblClick: (a) => { select(a, true); enter(); }, emptyText: 'No animals in this list' });
+    const list = ui().grid({ columns: listCols, rows: [], cls: 'list-grid', rowKey: (a) => a.uid, rowClass: (a) => statusCls(A(a)), onRowClick: (a) => { select(a, true); focusId(); }, onRowDblClick: (a) => { select(a, true); enter(); }, onRowContext: (a, x, y) => animalMenu(a, x, y), emptyText: 'No animals in this list' });
     const listTabBar = h('div.subtabs', listTabs.map((t) => h('button.subtab', { type: 'button', 'data-t': t, onclick: () => { st.list = t; st.search = null; refreshList(); } }, t)));
     const count = h('span.list-count');
     listTabBar.appendChild(count);
 
     const idInput = h('input#entry-id', { autocomplete: 'off', spellcheck: 'false', placeholder: 'Type ID and press Enter', 'aria-label': 'Animal ID' });
     idInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); goId(); } });
+    // the ID box always has the cursor, with any earlier ID highlighted so typing replaces it
+    let clickSelect = false;
+    idInput.addEventListener('focus', () => { idInput.select(); clickSelect = true; });
+    idInput.addEventListener('mouseup', (e) => { if (clickSelect) { e.preventDefault(); clickSelect = false; } });
+    function focusId() {
+      if (!win.isConnected || U.$('.modal-back') || U.$('.ctx-menu')) return;
+      const ae = document.activeElement;
+      if (ae && ae !== idInput && ae.closest && ae.closest('input, select, textarea') && win.contains(ae)) return; // typing elsewhere in this window
+      idInput.focus({ preventScroll: true }); idInput.select();
+    }
+    // back to the ID box whenever a dialog or menu closes
+    const refocus = new MutationObserver(() => { if (!win.isConnected) { refocus.disconnect(); return; } if (!U.$('.modal-back') && !U.$('.ctx-menu')) setTimeout(focusId, 0); });
+    refocus.observe(document.body, { childList: true });
     const idPanel = h('div.id-panel',
       h('div.id-label', 'ID'), idInput,
       h('div.id-btns',
@@ -516,7 +529,7 @@
     const ltBox = h('input#lt-sum', { type: 'checkbox', onchange: (e) => { st.lt = e.target.checked; renderHistory(); } });
     const histHead = h('div.hist-head', histTitle, h('label.lt', ltBox, ' L T Summary'));
     const histHost = h('div.hist-host');
-    const evTabs = h('div.evtabs', tabs.map((t) => h('button.evtab', { type: 'button', 'data-t': t, onclick: () => { st.tab = t; renderTabs(); if (st.list === 'Current') refreshList(); idInput.focus(); } }, TAB_LABEL[t])));
+    const evTabs = h('div.evtabs', tabs.map((t) => h('button.evtab', { type: 'button', 'data-t': t, onclick: () => { st.tab = t; renderTabs(); if (st.list === 'Current') refreshList(); focusId(); } }, TAB_LABEL[t])));
 
     const left = h('div.entry-left', h('div.list-box', list, listTabBar), idPanel, tb, histHead, histHost, evTabs);
     const right = h('aside.entry-right',
@@ -594,7 +607,8 @@
       const rows = historyRows(a);
       const g = ui().grid({
         cls: 'hist-grid', rows, rowKey: (x, i) => (x.ev ? x.ev.eid : 'a' + i), selectedKey: st.histSel && st.histSel.eid,
-        onRowClick: (x) => { st.histSel = x.ev || null; }, onRowDblClick: (x) => { st.histSel = x.ev || null; editSel(); },
+        onRowClick: (x) => { st.histSel = x.ev || null; focusId(); }, onRowDblClick: (x) => { st.histSel = x.ev || null; editSel(); },
+        onRowContext: (x, cx, cy) => historyMenu(x, cx, cy),
         columns: [
           gilt ? null : { label: 'Par', num: true, value: (x) => x.par }, { label: 'Date', value: (x) => U.fmt(x.date), sort: (x) => x.date },
           { label: 'Interval', num: true, value: (x) => x.interval }, { label: 'Event', value: (x) => x.event }, { label: '#', num: true, value: (x) => x.count ?? '' },
@@ -603,6 +617,38 @@
       });
       histHost.appendChild(g);
       const scroller = g; requestAnimationFrame(() => { scroller.scrollTop = scroller.scrollHeight; });
+    }
+    /* right-click menus */
+    function newEventItems(a) {
+      const r = A(a);
+      return tabs.filter((t) => t !== 'entry' && (a.sex !== 'M' || ['location', 'editid', 'disease', 'remove'].includes(t)))
+        .map((t) => ({ label: `New ${(S.EVENTS[t] || {}).label || TAB_LABEL[t]}…`, disabled: !!(ELIGIBLE[t] && !ELIGIBLE[t](r)), onClick: () => openEventDialog(t, S.store.get(a.uid) || a, null, (u) => select(u)) }));
+    }
+    function historyMenu(x, cx, cy) {
+      const a = st.sel; if (!a) return;
+      const ev = x.ev || null;
+      st.histSel = ev;
+      const label = ev ? `${(S.EVENTS[ev.type] || {}).label || ev.type} ${U.fmt(ev.date)}` : '';
+      ui().contextMenu(cx, cy, [
+        ev ? { label: `Edit ${label}…`, onClick: editSel } : { label: 'Edit animal details…', onClick: () => openDetails(a, (u) => { st.sel = u; refresh(); }) },
+        ev ? { label: `Delete ${label}…`, danger: true, onClick: delSel } : null,
+        '-',
+        ...newEventItems(a),
+        '-',
+        { label: 'Animal details…', onClick: () => openDetails(a, (u) => { st.sel = u; refresh(); }) },
+        { label: 'Sow card', onClick: () => S.sowCard.open(a) },
+        { label: st.lt ? 'Show full history' : 'Show lifetime summary', onClick: () => { st.lt = !st.lt; ltBox.checked = st.lt; renderHistory(); } },
+      ]);
+    }
+    function animalMenu(a, cx, cy) {
+      ui().contextMenu(cx, cy, [
+        st.tab === 'entry' ? null : { label: `Enter ${(S.EVENTS[st.tab] || {}).label || TAB_LABEL[st.tab]} for ${a.id}…`, onClick: () => { select(a, true); enter(); } },
+        st.tab === 'entry' ? null : '-',
+        ...newEventItems(a),
+        '-',
+        { label: 'Animal details…', onClick: () => openDetails(a, (u) => { st.sel = u; refresh(); }) },
+        { label: 'Sow card', onClick: () => S.sowCard.open(a) },
+      ]);
     }
     function goId() {
       const id = idInput.value.trim();
@@ -746,7 +792,7 @@
     win.refresh = refresh;
     win.selectAnimal = (a) => select(S.store.get(a.uid) || a);
     refresh();
-    setTimeout(() => idInput.focus(), 50);
+    setTimeout(focusId, 50);
     return win;
   }
 

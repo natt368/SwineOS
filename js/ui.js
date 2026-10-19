@@ -105,7 +105,7 @@
   }
 
   /* ---------- sortable data grid ---------- */
-  function grid({ columns, rows, onRowClick, onRowDblClick, selectedKey, rowKey = (r, i) => i, rowClass, cls = '', emptyText = 'No records', maxRows = 3000 }) {
+  function grid({ columns, rows, onRowClick, onRowDblClick, onRowContext, selectedKey, rowKey = (r, i) => i, rowClass, cls = '', emptyText = 'No records', maxRows = 3000 }) {
     let sortCol = null; let sortDir = 1;
     const wrap = h('div.grid-wrap' + (cls ? '.' + cls : ''));
     const table = h('table.grid');
@@ -142,6 +142,15 @@
           tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') onRowDblClick ? onRowDblClick(r) : onRowClick(r); });
         }
         if (onRowDblClick) tr.addEventListener('dblclick', () => onRowDblClick(r));
+        if (onRowContext) {
+          // right-click, or press and hold on a touch screen: select the row, then show its menu
+          const open = (x, y) => { U.$$('tr.sel', tbody).forEach((t) => t.classList.remove('sel')); tr.classList.add('sel'); if (onRowClick) onRowClick(r); onRowContext(r, x, y); };
+          tr.addEventListener('contextmenu', (e) => { e.preventDefault(); open(e.clientX, e.clientY); });
+          let hold = null;
+          tr.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'touch') return; hold = setTimeout(() => { hold = 'done'; open(e.clientX, e.clientY); }, 550); });
+          const cancel = () => { if (hold && hold !== 'done') clearTimeout(hold); hold = null; };
+          tr.addEventListener('pointerup', cancel); tr.addEventListener('pointercancel', cancel); tr.addEventListener('pointermove', (e) => { if (e.pointerType === 'touch' && hold && hold !== 'done' && (Math.abs(e.movementX) > 4 || Math.abs(e.movementY) > 4)) cancel(); });
+        }
         tbody.appendChild(tr);
       });
       if (data.length > maxRows) tbody.appendChild(h('tr.empty', h('td', { colspan: columns.length }, `Showing first ${maxRows} of ${data.length}`)));
@@ -152,6 +161,35 @@
     wrap.getRows = () => rows;
     wrap.toCSV = () => U.csv([columns.map((c) => c.label), ...rows.map((r) => columns.map((c) => { const v = c.value(r); return v instanceof Node ? v.textContent : v; }))]);
     return wrap;
+  }
+
+  /* ---------- right-click menu ---------- */
+  /** items: [{ label, onClick, disabled, danger }] or '-' for a separator. */
+  function contextMenu(x, y, items) {
+    U.$$('.ctx-menu').forEach((m) => m.close());
+    const menu = h('div.ctx-menu', { role: 'menu' });
+    const btns = [];
+    items.filter(Boolean).forEach((it) => {
+      if (it === '-') { menu.appendChild(h('div.ctx-sep')); return; }
+      const b = h('button.ctx-item' + (it.danger ? '.danger' : ''), { type: 'button', role: 'menuitem', disabled: !!it.disabled, onclick: () => { close(); it.onClick(); } }, it.label);
+      btns.push(b); menu.appendChild(b);
+    });
+    const onDown = (e) => { if (!menu.contains(e.target)) close(); };
+    const onKey = (e) => {
+      const live = btns.filter((b) => !b.disabled); const i = live.indexOf(document.activeElement);
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); (live[i + 1] || live[0]).focus(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); (live[i - 1] || live[live.length - 1]).focus(); }
+    };
+    function close() { if (!menu.isConnected) return; menu.remove(); document.removeEventListener('pointerdown', onDown, true); document.removeEventListener('keydown', onKey, true); window.removeEventListener('resize', close); window.removeEventListener('blur', close); }
+    menu.close = close;
+    document.body.appendChild(menu);
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(4, Math.min(x, innerWidth - r.width - 4)) + 'px';
+    menu.style.top = Math.max(4, Math.min(y, innerHeight - r.height - 4)) + 'px';
+    setTimeout(() => { document.addEventListener('pointerdown', onDown, true); document.addEventListener('keydown', onKey, true); window.addEventListener('resize', close); window.addEventListener('blur', close); }, 0);
+    const first = btns.find((b) => !b.disabled); if (first) first.focus({ preventScroll: true });
+    return menu;
   }
 
   /* ---------- simple SVG charts ---------- */
@@ -263,5 +301,5 @@
   function input(id, value, attrs = {}) { return h('input', { id, value: value ?? '', ...attrs }); }
   function dateInput(id, value, attrs = {}) { return h('input', { id, type: 'date', value: value || '', ...attrs }); }
 
-  S.ui = { icon, ICONS, toast, modal, confirmBox, alertBox, appWindow, grid, lineChart, scatter, saveFile, printPreview, field, select, input, dateInput };
+  S.ui = { icon, ICONS, toast, modal, confirmBox, alertBox, appWindow, grid, contextMenu, lineChart, scatter, saveFile, printPreview, field, select, input, dateInput };
 })(window.SOS);
