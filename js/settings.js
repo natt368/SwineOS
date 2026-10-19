@@ -74,7 +74,7 @@
           h('p', `${S.store.animals().length} animals on file (${females} females). Storage: ${st.backend === 'cloud' ? 'shared online database' : 'this browser'}.`),
           s.demo ? h('p.demo-note', 'The herd on file is EXAMPLE data. Clear it before entering your own animals.') : null,
           h('div.btn-col',
-            h('button.wbtn', { type: 'button', onclick: () => ui().saveFile(`swineos-backup-${U.today()}.json`, S.store.exportJSON(), 'application/json') }, 'Download backup'),
+            h('button.wbtn', { type: 'button', onclick: () => ui().saveFile(`swineos-backup-${U.today()}.json`, S.store.exportJSON(), 'application/json') }, 'Download backup file to this computer'),
             h('button.wbtn', { type: 'button', onclick: () => show('drive') }, S.drive.configured() ? 'Google Drive backup: ' + (S.drive.config.folderName || '') : 'Connect Google Drive for automatic backups…'),
             h('label.wbtn.file.big', 'Import PigWIN backup (.BDR)…', h('input', { type: 'file', accept: '.bdr,.BDR,.zip', onchange: (e) => importPigwin(e.target.files[0], prog) })),
             h('label.wbtn.file', 'Restore backup…', h('input', { type: 'file', accept: '.json,.gz,application/json,application/gzip,.bdr,.BDR', onchange: (e) => restore(e.target.files[0], prog) })),

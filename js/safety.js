@@ -34,22 +34,26 @@
     if (cloud) {
       if (ss.error) return { st: 'error', label: 'Not saved', detail: 'The last change could not be saved to the online database: ' + ss.error };
       if (ss.pending > 0) return { st: 'saving', label: 'Saving…', detail: 'Saving your changes to the shared online database.' };
-      return { st: 'safe', label: 'Saved online', detail: 'Every change is saved to the shared online database' + (ss.lastSaved ? ` (last save ${ago(ss.lastSaved)})` : '') + '.' };
+    } else {
+      if (ss.error) return { st: 'error', label: 'Not saved', detail: ss.error + '. Download a backup now.' };
+      if (ss.localPending) return { st: 'saving', label: 'Saving…', detail: 'Saving your changes on this computer.' };
     }
-    if (ss.error) return { st: 'error', label: 'Not saved', detail: ss.error + '. Download a backup now.' };
-    if (ss.localPending) return { st: 'saving', label: 'Saving…', detail: 'Saving your changes on this computer.' };
+    const where = cloud ? 'the shared online database' : 'this computer';
     const d = S.drive;
     if (d && d.configured()) {
       const cfg = d.config; const ds = d.status.state;
       const when = cfg.lastBackup ? ago(cfg.lastBackup) : '';
       if (ds === 'saving') return { st: 'saving', label: 'Backing up…', detail: 'Uploading a backup to Google Drive.' };
       if (ds === 'loading') return { st: 'saving', label: 'Checking backup…', detail: 'Checking Google Drive for the newest backup.' };
-      if (ds === 'pending') return { st: 'pending', label: 'Backing up soon', detail: 'Your latest changes are saved on this computer and go to Google Drive within a minute.' };
-      if (ds === 'ok') return { st: 'safe', label: `Backed up to ${cfg.folderName}` + (when ? ' · ' + when : ''), detail: `Saved on this computer and backed up to Google Drive (folder "${cfg.folderName}")${when ? ', ' + when : ''}.` };
-      if (ds === 'connect') return { st: 'warn', label: 'Click to reconnect', detail: 'Google Drive sign-in needs renewing. Click anywhere in SwineOS and it renews and loads the latest backup. Until then changes are saved on this computer.' };
-      if (ds === 'error') return { st: 'warn', label: 'Backup failed', detail: 'The last Google Drive backup failed: ' + (d.status.msg || 'unknown error') + '. Changes are saved on this computer; SwineOS tries again after the next change.' };
+      if (ds === 'pending') return { st: 'pending', label: 'Backing up soon', detail: `Your latest changes are saved in ${where} and go to Google Drive within a minute.` };
+      if (ds === 'ok') return { st: 'safe', label: `Backed up to ${cfg.folderName}` + (when ? ' · ' + when : ''), detail: `Saved in ${where} and backed up to Google Drive (folder "${cfg.folderName}")${when ? ', ' + when : ''}.` };
+      if (ds === 'connect') return d.connector
+        ? { st: 'warn', label: 'Drive needs permission', detail: (d.status.msg || 'SwineOS needs your permission to use Google Drive.') + ` Until then changes are saved in ${where}.` }
+        : { st: 'warn', label: 'Click to reconnect', detail: 'Google Drive sign-in needs renewing. Click anywhere in SwineOS and it renews and loads the latest backup. Until then changes are saved on this computer.' };
+      if (ds === 'error') return { st: 'warn', label: 'Backup failed', detail: 'The last Google Drive backup failed: ' + (d.status.msg || 'unknown error') + `. Changes are saved in ${where}; SwineOS tries again after the next change.` };
       return { st: 'saving', label: 'Connecting…', detail: 'Connecting to Google Drive.' };
     }
+    if (cloud) return { st: 'safe', label: 'Saved online', detail: 'Every change is saved to the shared online database' + (ss.lastSaved ? ` (last save ${ago(ss.lastSaved)})` : '') + '. It is not backed up to Google Drive yet: set that up under Settings → Google Drive.' };
     const dl = lastDownload();
     return { st: 'warn', label: 'This computer only', detail: 'Records are saved in this browser on this computer, but not backed up anywhere else' + (dl ? ` (last backup file downloaded ${ago(dl)})` : '') + '. Connect Google Drive for automatic backups, or download a backup file regularly.' };
   }
@@ -72,14 +76,15 @@
       h('div.safe-head', h('span.safe-big', { html: icon(c.st) }), h('div', h('div.safe-title', c.label), h('div', c.detail))),
       row('Records saved', cloud ? 'Shared online database' : 'This browser on this computer'),
       row('Last saved', ss.lastSaved ? new Date(ss.lastSaved).toLocaleString() : (S.store.state.savedAt ? new Date(S.store.state.savedAt).toLocaleString() : '')),
-      cloud ? null : row('Google Drive folder', dc ? d.folderLabel() : (d && d.available() ? 'Not connected' : 'Not available here')),
-      cloud || !dc ? null : row('Google account', d.config.email || ''),
-      cloud || !dc ? null : row('Last synced with Google Drive', d.config.lastBackup ? new Date(d.config.lastBackup).toLocaleString() : 'not yet'),
+      row('Google Drive folder', dc ? d.folderLabel() : (d && d.available() ? 'Not connected' : 'Not available here')),
+      !dc ? null : row('Google account', d.config.email || (d.connector ? 'Claude Google Drive connection' : '')),
+      !dc ? null : row('Last backup to Google Drive', d.config.lastBackup ? new Date(d.config.lastBackup).toLocaleString() : 'not yet'),
+      !dc || !d.config.lastFile ? null : row('Last backup file', d.config.lastFile.name),
       cloud ? null : row('Last backup file downloaded', lastDownload() ? new Date(lastDownload()).toLocaleString() : 'never'),
       row('Animals on file', String(S.store.animals().length)));
     const buttons = [];
-    if (dc) buttons.push({ label: 'Back up now', primary: true, onClick: async () => { try { if (d.status.state === 'connect') { d.reconnect(); return; } await d.backupNow(true); ui().toast('Backed up to Google Drive.', 'ok'); } catch (e) { ui().alertBox('Google Drive', e.message); } } });
-    else if (!cloud && d && d.available()) buttons.push({ label: 'Set up Google Drive backup', primary: true, onClick: () => S.settingsUI.open('drive') });
+    if (dc) buttons.push({ label: 'Back up now', primary: true, onClick: () => { if (!d.connector && d.status.state === 'connect') d.reconnect(); else d.backupNowDialog(); } });
+    else if (d && d.available()) buttons.push({ label: 'Set up Google Drive backup', primary: true, onClick: () => S.settingsUI.open('drive') });
     buttons.push({ label: 'Download backup file', onClick: () => { ui().saveFile(`swineos-backup-${U.today()}.json`, S.store.exportJSON(), 'application/json'); return true; } });
     if (dc) buttons.push({ label: 'Google Drive settings', onClick: () => S.settingsUI.open('drive') });
     buttons.push({ label: 'Close' });

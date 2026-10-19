@@ -89,7 +89,7 @@ On the website version (GitHub Pages), **Settings → Google Drive** connects a 
 
 One-time set-up: Google requires an OAuth Client ID for the site. In console.cloud.google.com create a project, enable the **Google Drive API**, set up the **OAuth consent screen** (External, add your Google address as a test user), then create an **OAuth client ID → Web application** with `https://natt368.github.io` as an authorized JavaScript origin. Paste the Client ID in Settings → Google Drive, or put it in `js/config.js` so every computer has it. Google shows an "unverified app" warning the first time: choose Continue.
 
-The claude.ai version does not use Google Drive: its browser frame blocks Google sign-in, and it already saves to a shared online database.
+**claude.ai version:** records are kept in the shared online database, and Settings → Google Drive backs them up through the **Google Drive connector of your Claude account** (claude.ai Settings → Connectors): no Client ID or Google Cloud set-up. Press *Connect Google Drive*, allow SwineOS to use Google Drive when claude.ai asks, and choose a folder. Each backup is a new file `SwineOS backup - <farm> - <date> <time>.json.gz` (split into `(1 of 2)`, `(2 of 2)` … parts when the herd is over 700 KB compressed, because one connector call carries at most 1 MB). The newest backup is kept, plus the last one of each earlier day for *Daily copies to keep* days; older ones go to the Drive trash. If the claude.ai version opens with no animals, it loads the newest backup from the folder. *Back up now* shows the file name with a link to it in Drive.
 
 ## Hosting on GitHub Pages
 
