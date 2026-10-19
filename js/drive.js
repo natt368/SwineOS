@@ -45,6 +45,7 @@
     switch (status.state) {
       case 'ok': return `Google Drive "${cfg.folderName}": backed up` + (t ? ' ' + t : '');
       case 'pending': return 'Google Drive: changes waiting to back up';
+      case 'offline': return 'Google Drive: no internet – backs up when it is back';
       case 'saving': return 'Google Drive: backing up…';
       case 'loading': return 'Google Drive: loading backup…';
       case 'connect': return CONN ? 'Google Drive: ' + (status.msg || 'needs permission') : 'Google Drive: click to reconnect';
@@ -365,6 +366,12 @@
     if (!configured()) { if (interactive) throw new Error('Choose a Google Drive folder first (Settings → Google Drive).'); return; }
     if (busy) { if (interactive) throw new Error('A backup is already running. Try again in a moment.'); return; }
     if (!CONN && S.store.state.backend === 'cloud') return;
+    if (!navigator.onLine) {
+      // no internet: keep working on this computer and back up as soon as the connection returns
+      clearTimeout(timer); setStatus('offline');
+      if (interactive) throw new Error('There is no internet connection. Your changes are saved on this computer and go to Google Drive by themselves when the internet is back.');
+      return;
+    }
     busy = true; clearTimeout(timer);
     setStatus('saving');
     try {
@@ -398,7 +405,7 @@
       setStatus('ok');
       return cfg.lastFile;
     } catch (e) {
-      setStatus(e.code === 'connect' ? 'connect' : 'error', e.message);
+      setStatus(e.code === 'connect' ? 'connect' : !navigator.onLine ? 'offline' : 'error', e.message);
       if (e.code === 'connect') armFirstClick();
       if (interactive) throw e;
     } finally { busy = false; }
@@ -495,7 +502,7 @@
 
   function schedule() {
     if (!configured() || !cfg.auto || (!CONN && S.store.state.backend === 'cloud')) return;
-    setStatus('pending');
+    setStatus(navigator.onLine ? 'pending' : 'offline');
     clearTimeout(timer);
     timer = setTimeout(() => backupNow(), AUTO_DELAY);
   }
@@ -508,10 +515,18 @@
       if (document.visibilityState === 'hidden' && status.state === 'pending') backupNow();
       if (!CONN && document.visibilityState === 'visible' && status.state !== 'pending' && tokenValid()) sync(false).catch(() => {});
     });
-    window.addEventListener('online', () => { if (status.state === 'pending' || status.state === 'error') backupNow(); });
+    window.addEventListener('offline', () => { if (status.state !== 'connect') setStatus('offline'); });
+    window.addEventListener('online', () => {
+      // internet is back: send what changed meanwhile, or pick up backups made elsewhere
+      if (status.state === 'connect') return;
+      const changed = S.store.state.savedAt && S.store.state.savedAt !== cfg.lastLocal;
+      setTimeout(() => { (changed ? backupNow() : sync(false)).catch(() => {}); }, 3000);
+    });
     if (!CONN) setInterval(() => { if (document.visibilityState === 'visible' && status.state !== 'pending' && tokenValid()) sync(false).catch(() => {}); }, CHECK_EVERY);
+    if (!navigator.onLine) { setStatus('offline'); return; }
     setStatus('loading');
     try { await sync(true); } catch (e) {
+      if (!navigator.onLine) { setStatus('offline'); return; }
       setStatus(e.code === 'connect' ? 'connect' : 'error', e.message);
       if (e.code === 'connect') {
         // blocked without a click: renew on the first click instead of asking

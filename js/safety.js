@@ -45,6 +45,7 @@
       const when = cfg.lastBackup ? ago(cfg.lastBackup) : '';
       if (ds === 'saving') return { st: 'saving', label: 'Backing up…', detail: 'Uploading a backup to Google Drive.' };
       if (ds === 'loading') return { st: 'saving', label: 'Checking backup…', detail: 'Checking Google Drive for the newest backup.' };
+      if (ds === 'offline') return { st: 'pending', label: 'Offline · will back up', detail: `No internet right now. Keep working: changes are saved in ${where} and go to Google Drive by themselves as soon as the internet is back.` };
       if (ds === 'pending') return { st: 'pending', label: 'Backing up soon', detail: `Your latest changes are saved in ${where} and go to Google Drive within a minute.` };
       if (ds === 'ok') return { st: 'safe', label: `Backed up to ${cfg.folderName}` + (when ? ' · ' + when : ''), detail: `Saved in ${where} and backed up to Google Drive (folder "${cfg.folderName}")${when ? ', ' + when : ''}.` };
       if (ds === 'connect') return d.connector

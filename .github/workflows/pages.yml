@@ -29,7 +29,9 @@ jobs:
       - name: Assemble site
         run: |
           mkdir -p _site
-          cp -r index.html css js _site/
+          cp -r index.html css js sw.js manifest.webmanifest icon.svg icon-192.png icon-512.png _site/
+          # a new version name makes computers that use SwineOS offline fetch the new files
+          sed -i "s/__BUILD__/${GITHUB_SHA::12}/" _site/sw.js
           node scripts/build-single.mjs _site/swineos-offline.html
       # Pages has to be switched on once in the repository settings (Source: GitHub Actions).
       # Until then, finish green with a notice instead of failing.

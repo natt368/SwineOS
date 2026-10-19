@@ -84,7 +84,12 @@
     // index.html already shows the running pig; only add it if the page was opened another way
     if (!root.querySelector('.loading')) root.innerHTML = '<div class="loading"><div class="loading-text">Loading herd records…</div></div>';
     const loadingText = (t) => { const el = root.querySelector('.loading-text'); if (el) el.textContent = t; };
+    // keep a copy of the app on this computer so it also opens without internet (website version only)
+    if ('serviceWorker' in navigator && !window.claude && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
     await S.store.init();
+    // records on this computer load in a blink: let the pig run for a moment so the screen does not flash
+    const minShow = 1300 - performance.now();
+    if (minShow > 0 && root.querySelector('.run-pig')) await new Promise((r) => setTimeout(r, minShow));
     S.safety.start();
     S.mainMenu.applyScale();
     S.mainMenu.applyPrint();

@@ -77,6 +77,12 @@ Every window shows a badge in its blue title bar:
 
 Click the badge for details (last save, last Google Drive backup, last downloaded backup file) and for *Back up now* / *Download backup file*.
 
+## Working without internet
+
+The website version (https://natt368.github.io/SwineOS/) keeps a copy of itself on each computer after it has been opened once with internet (a service worker). After that it opens and works fully without internet: records are saved in the browser on that computer as usual. While offline the badge says *Offline · will back up*; as soon as the internet is back, SwineOS sends the changes to Google Drive by itself (and picks up backups made on other computers). New versions of the app arrive automatically the next time it is opened with internet. On a phone or tablet, *Add to Home Screen* (or *Install app* in Chrome/Edge) gives SwineOS its own icon.
+
+The claude.ai version needs internet, because its records live in the online database.
+
 ## Google Drive backup
 
 On the website version (GitHub Pages), **Settings → Google Drive** connects a Google account and a Drive folder:
