@@ -42,7 +42,11 @@
           h('div.mm-lic',
             h('div.mm-cy', 'This software', h('br'), 'is licensed to:'),
             h('div.mm-lines', [o.license ? 'License : ' + o.license : null, o.name, o.address, o.city].filter(Boolean).map((l) => h('div', l))),
-            h('div.mm-cy', 'Currently selected farm:'), h('div.mm-lines', h('div', `${st.farmNumber} ${st.farmName}`))),
+            h('div.mm-cy', 'Currently selected farm:'), h('div.mm-lines', h('div', `${st.farmNumber} ${st.farmName}`)),
+            S.drive.available() ? h('div.mm-cy', 'Google Drive folder:') : null,
+            S.drive.available() ? h('div.mm-lines', S.drive.configured()
+              ? h('button.mm-link', { type: 'button', onclick: () => S.settingsUI.open('drive') }, `${S.drive.folderLabel()}${S.drive.config.email ? '  (' + S.drive.config.email + ')' : ''}`)
+              : h('button.mm-link', { type: 'button', onclick: () => S.settingsUI.open('drive') }, 'Not connected – click to connect')) : null),
           h('div.mm-kpis',
             tile('breeding females', fem.length, () => S.app.entry()), tile('served', c('Served'), () => S.app.entry()),
             tile('lactating', c('Lactating'), () => S.app.entry()), tile('open / gilts', c('Open') + c('Gilt'), () => S.app.entry()),

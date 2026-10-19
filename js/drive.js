@@ -38,7 +38,7 @@
   function statusText() {
     const t = cfg.lastBackup ? new Date(cfg.lastBackup).toLocaleString([], { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
     switch (status.state) {
-      case 'ok': return 'Google Drive: backed up' + (t ? ' ' + t : '');
+      case 'ok': return `Google Drive "${cfg.folderName}": backed up` + (t ? ' ' + t : '');
       case 'pending': return 'Google Drive: changes waiting to back up';
       case 'saving': return 'Google Drive: backing up…';
       case 'loading': return 'Google Drive: loading backup…';
@@ -109,6 +109,57 @@
   }
 
   /* ---------------- files ---------------- */
+  /** "My Drive / Farm / SwineOS backups" for a folder id. */
+  async function folderPath(id) {
+    const names = [];
+    let cur = id;
+    for (let i = 0; i < 12 && cur; i++) {
+      if (cur === 'root') { names.unshift('My Drive'); break; }
+      const f = await (await api(`/files/${cur}?fields=id,name,parents&supportsAllDrives=true`)).json();
+      names.unshift(f.name);
+      cur = f.parents && f.parents[0];
+      if (!cur) break;
+    }
+    return names.join(' / ');
+  }
+  /** Folders anywhere in Drive that hold a SwineOS main backup, newest first. */
+  async function findBackupFolders() {
+    const query = "appProperties has { key='swineos' and value='main' } and trashed=false";
+    const r = await (await api(`/files?q=${q(query)}&fields=files(id,name,parents,modifiedTime,appProperties)&orderBy=modifiedTime desc&pageSize=50&supportsAllDrives=true&includeItemsFromAllDrives=true`)).json();
+    const out = []; const seen = new Set();
+    for (const f of r.files || []) {
+      const pid = f.parents && f.parents[0];
+      if (!pid || seen.has(pid)) continue;
+      seen.add(pid);
+      let path = pid;
+      try { path = await folderPath(pid); } catch (e) { /* keep id */ }
+      out.push({ id: pid, name: path.split(' / ').pop(), path, file: f });
+    }
+    return out;
+  }
+  async function useFolder(f) {
+    cfg.folderId = f.id; cfg.folderName = f.name; cfg.folderPath = f.path || f.name;
+    cfg.mainFileId = ''; cfg.lastRemote = ''; save();
+    if (!started) await startup(); else await sync(true);
+  }
+  /** Sign in, find the folder that holds the SwineOS backup and load it. Used on a new computer. */
+  async function connectAndLoad() {
+    if (!clientId()) { S.settingsUI.open('drive'); ui().toast('Paste the Google Client ID first (Settings → Google Drive).'); return; }
+    await connect();
+    if (cfg.folderId) { setStatus('loading'); await sync(true); return; }
+    const found = await findBackupFolders();
+    if (found.length === 1) { await useFolder(found[0]); return; }
+    if (!found.length) {
+      await ui().alertBox('Google Drive', 'No SwineOS backup was found in this Google Drive yet. Choose the folder where SwineOS should keep its backups.');
+      chooseFolder((f) => useFolder(f));
+      return;
+    }
+    ui().modal({ title: 'Choose the farm backup', width: 620, body: h('div', h('p', 'SwineOS backups were found in these Google Drive folders. Pick the one to use on this computer:'),
+      ui().grid({ rows: found, columns: [
+        { label: 'Folder', value: (f) => f.path }, { label: 'Farm', value: (f) => (f.file.appProperties || {}).farm || '' },
+        { label: 'Last saved', value: (f) => new Date((f.file.appProperties || {}).savedAt || f.file.modifiedTime).toLocaleString() },
+      ], onRowDblClick: (f) => { U.$$('.modal-back').pop().remove(); useFolder(f); } }), h('p.hint', 'Double-click a folder to use it.')), buttons: [{ label: 'Cancel' }] });
+  }
   async function listFolders(parent) {
     const query = `mimeType='${FOLDER}' and trashed=false and '${parent}' in parents`;
     const r = await (await api(`/files?q=${q(query)}&fields=files(id,name)&orderBy=name&pageSize=500&supportsAllDrives=true&includeItemsFromAllDrives=true`)).json();
@@ -197,7 +248,7 @@
     await S.store.replaceAll(data.animals, data.settings, null, { savedAt: data.savedAt || file.modifiedTime, log: data.log });
     S.model.resetCache();
     if ((file.appProperties || {}).swineos === 'main') { cfg.mainFileId = file.id; cfg.lastRemote = file.modifiedTime; }
-    cfg.lastLocal = S.store.state.savedAt || ''; save();
+    cfg.lastLocal = S.store.state.savedAt || ''; cfg.lastBackup = new Date().toISOString(); save();
     setStatus('ok');
     const p = file.appProperties || {};
     ui().toast(`${why || 'Loaded backup from Google Drive'}: ${data.animals.length} animals, saved ${new Date(p.savedAt || file.modifiedTime).toLocaleString()}${p.device ? ' on ' + p.device : ''}.`, 'ok');
@@ -283,8 +334,8 @@
       } catch (e) { listEl.innerHTML = ''; listEl.appendChild(h('div.hint', 'Could not list folders: ' + e.message)); }
     };
     const m = ui().modal({ title: 'Choose a Google Drive folder', width: 560, body: h('div', crumbs, listEl, h('p.hint', 'Double-click a folder to open it. Select a folder and press Use folder, or press Use this folder to back up into the folder that is open.')), buttons: [
-      { label: 'Use folder', primary: true, onClick: () => { const f = sel || path[path.length - 1]; done(f.id === 'root' ? { id: 'root', name: 'My Drive' } : f); } },
-      { label: 'Use this folder', onClick: () => { const f = path[path.length - 1]; done(f); } },
+      { label: 'Use folder', primary: true, onClick: () => { const f = sel || path[path.length - 1]; const names = path.map((p) => p.name).concat(sel ? [sel.name] : []); done({ ...f, path: names.join(' / ') }); } },
+      { label: 'Use this folder', onClick: () => { const f = path[path.length - 1]; done({ ...f, path: path.map((p) => p.name).join(' / ') }); } },
       { label: 'New folder…', onClick: async () => {
         const inp = ui().input('gd-new', 'SwineOS backups');
         ui().modal({ title: 'New folder', width: 360, body: h('div.form', ui().field('Name', inp)), buttons: [{ label: 'Create', primary: true, onClick: async () => { try { const f = await createFolder(inp.value.trim() || 'SwineOS backups', path[path.length - 1].id); path.push(f); render(); } catch (e) { ui().alertBox('Google Drive', e.message); } } }, { label: 'Cancel' }] });
@@ -343,11 +394,11 @@
           cfg.email ? h('span', 'Account: ', h('b', cfg.email)) : h('span', 'Not connected'),
           cfg.email
             ? h('button.wbtn', { type: 'button', onclick: () => { disconnect(); render(); } }, 'Disconnect')
-            : h('button.wbtn.primary', { type: 'button', onclick: async () => { try { if (!clientId()) { ui().alertBox('Google Drive', 'Paste the Google Client ID first.'); return; } await connect(); render(); } catch (e) { ui().alertBox('Google Drive', e.message); } } }, 'Connect Google Drive')),
+            : h('button.wbtn.primary', { type: 'button', onclick: async () => { try { if (!clientId()) { ui().alertBox('Google Drive', 'Paste the Google Client ID first.'); return; } await connectAndLoad(); render(); } catch (e) { ui().alertBox('Google Drive', e.message); } } }, 'Connect Google Drive')),
         h('div.gd-row2',
-          h('span', 'Folder: ', h('b', cfg.folderName || 'none chosen')),
+          h('span', 'Connected folder: ', h('b.gd-folder', cfg.folderPath || cfg.folderName || 'none chosen')),
           h('button.wbtn', { type: 'button', disabled: !cfg.email, onclick: () => chooseFolder(async (f) => {
-            cfg.folderId = f.id; cfg.folderName = f.name; cfg.mainFileId = ''; cfg.lastRemote = ''; save(); render();
+            cfg.folderId = f.id; cfg.folderName = f.name; cfg.folderPath = f.path || f.name; cfg.mainFileId = ''; cfg.lastRemote = ''; save(); render();
             try { await sync(true); } catch (e) { ui().alertBox('Google Drive', e.message); }
             if (!started) startup();
             render();
@@ -374,5 +425,5 @@
     return el;
   }
 
-  S.drive = { startup, backupNow, sync, pane, statusChip, configured, available, get config() { return cfg; }, status, onStatus: (fn) => { statusListeners.add(fn); return () => statusListeners.delete(fn); }, reconnect: reconnectBanner };
+  S.drive = { connectAndLoad, folderLabel: () => cfg.folderPath || cfg.folderName || '', hasClientId: () => !!clientId(), startup, backupNow, sync, pane, statusChip, configured, available, get config() { return cfg; }, status, onStatus: (fn) => { statusListeners.add(fn); return () => statusListeners.delete(fn); }, reconnect: reconnectBanner };
 })(window.SOS);

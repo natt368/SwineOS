@@ -595,3 +595,5 @@ button { cursor: pointer; }
 .safe-row { display: grid; grid-template-columns: 200px 1fr; gap: 8px; font-size: 13px; }
 .safe-row b { font-weight: 600; }
 @media print { .safe-badge { display: none; } }
+.mm-link { background: none; border: 0; color: #fff; text-decoration: underline; padding: 0; text-align: left; font-size: 14px; }
+.gd-folder { word-break: break-word; }

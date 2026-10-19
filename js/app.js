@@ -62,9 +62,11 @@
   function welcome() {
     ui().modal({ title: 'Welcome to SwineOS', width: 560, body: h('div',
       h('p', 'There are no animals on file yet.'),
+      S.drive.available() ? h('p', 'If your herd is backed up to Google Drive, press Load from Google Drive: SwineOS finds the backup folder and loads the records.') : null,
       h('p', 'Start entering your own herd, or load an example herd of about 480 sows with two years of history to try the reports and action lists first. The example can be cleared at any time.')),
     buttons: [
-      { label: 'Load example herd', primary: true, onClick: async () => {
+      S.drive.available() ? { label: 'Load from Google Drive', primary: true, onClick: async () => { try { await S.drive.connectAndLoad(); } catch (e) { ui().alertBox('Google Drive', e.message); } } } : null,
+      { label: 'Load example herd', primary: !S.drive.available(), onClick: async () => {
         const animals = S.demo.generate();
         ui().toast('Building example herd…');
         await S.store.replaceAll(animals, { ...S.store.settings, demo: true, farmName: 'Example Farm', farmNumber: '1000001' });
@@ -72,7 +74,7 @@
         app.home();
       } },
       { label: 'Start with my own herd', onClick: () => S.settingsUI.open('farm') },
-    ] });
+    ].filter(Boolean) });
   }
 
   async function start() {

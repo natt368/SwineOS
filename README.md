@@ -82,6 +82,8 @@ Click the badge for details (last save, last Google Drive backup, last downloade
 On the website version (GitHub Pages), **Settings → Google Drive** connects a Google account and a Drive folder:
 
 - One minute after every change, the herd is backed up to `SwineOS backup - <farm>.json.gz` in that folder (gzip-compressed, about 10 % of the JSON size), plus a dated copy for each day (the last 14 are kept; adjustable).
+- The connected folder (full path and Google account) is shown on the main menu, in the title-bar badge and in Settings → Google Drive.
+- On a new computer, press **Load from Google Drive** on the welcome screen (or Connect in Settings → Google Drive): SwineOS signs in, finds the folder that holds the SwineOS backup by itself and loads the herd. After that it remembers the folder.
 - When SwineOS opens, it loads the newest backup from the folder. Every 10 minutes, and when you come back to the tab, it checks for backups made on another computer. If both computers changed the records, it asks which to keep and saves the other version as a *conflict copy*.
 - The badge in every window's title bar shows when the last backup was made.
 

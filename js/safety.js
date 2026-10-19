@@ -45,7 +45,7 @@
       if (ds === 'saving') return { st: 'saving', label: 'Backing up…', detail: 'Uploading a backup to Google Drive.' };
       if (ds === 'loading') return { st: 'saving', label: 'Checking backup…', detail: 'Checking Google Drive for the newest backup.' };
       if (ds === 'pending') return { st: 'pending', label: 'Backing up soon', detail: 'Your latest changes are saved on this computer and go to Google Drive within a minute.' };
-      if (ds === 'ok') return { st: 'safe', label: 'Backed up' + (when ? ' ' + when : ''), detail: `Saved on this computer and backed up to Google Drive (folder "${cfg.folderName}")${when ? ', ' + when : ''}.` };
+      if (ds === 'ok') return { st: 'safe', label: `Backed up to ${cfg.folderName}` + (when ? ' · ' + when : ''), detail: `Saved on this computer and backed up to Google Drive (folder "${cfg.folderName}")${when ? ', ' + when : ''}.` };
       if (ds === 'connect') return { st: 'warn', label: 'Backup paused', detail: 'Google Drive sign-in has expired. Changes are saved on this computer only until you reconnect.' };
       if (ds === 'error') return { st: 'warn', label: 'Backup failed', detail: 'The last Google Drive backup failed: ' + (d.status.msg || 'unknown error') + '. Changes are saved on this computer; SwineOS tries again after the next change.' };
       return { st: 'saving', label: 'Connecting…', detail: 'Connecting to Google Drive.' };
@@ -72,8 +72,9 @@
       h('div.safe-head', h('span.safe-big', { html: icon(c.st) }), h('div', h('div.safe-title', c.label), h('div', c.detail))),
       row('Records saved', cloud ? 'Shared online database' : 'This browser on this computer'),
       row('Last saved', ss.lastSaved ? new Date(ss.lastSaved).toLocaleString() : (S.store.state.savedAt ? new Date(S.store.state.savedAt).toLocaleString() : '')),
-      cloud ? null : row('Google Drive backup', dc ? `Folder "${d.config.folderName}" · ${d.config.email || ''}` : (d && d.available() ? 'Not set up' : 'Not available here')),
-      cloud || !dc ? null : row('Last Google Drive backup', d.config.lastBackup ? new Date(d.config.lastBackup).toLocaleString() : 'not yet'),
+      cloud ? null : row('Google Drive folder', dc ? d.folderLabel() : (d && d.available() ? 'Not connected' : 'Not available here')),
+      cloud || !dc ? null : row('Google account', d.config.email || ''),
+      cloud || !dc ? null : row('Last synced with Google Drive', d.config.lastBackup ? new Date(d.config.lastBackup).toLocaleString() : 'not yet'),
       cloud ? null : row('Last backup file downloaded', lastDownload() ? new Date(lastDownload()).toLocaleString() : 'never'),
       row('Animals on file', String(S.store.animals().length)));
     const buttons = [];
