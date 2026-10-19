@@ -22,7 +22,7 @@
   /* ---------- report window frame ---------- */
   function reportWindow({ title, subtitle, build, params = {}, extra, noDates, defaults }) {
     const today = U.today();
-    const p = { begin: U.addDays(today, -365), end: today, parity: '', ...(defaults || {}) };
+    const p = { begin: U.addDays(today, -364), end: today, parity: '', ...(defaults || {}) };
     let last = null;
     const win = ui().appWindow({ title, cls: 'report-win', toolbar: [
       { icon: 'update', label: 'Update', onClick: () => run() },
@@ -32,7 +32,13 @@
       { icon: 'graph', label: 'Graph', onClick: () => { if (last && last.chart) ui().modal({ title: 'Graph – ' + title, body: last.chart(), width: 860, buttons: [{ label: 'Close', primary: true }] }); else ui().toast('This report has no graph.'); } },
       '|',
       { icon: 'print', label: 'Print', onClick: () => last && ui().printPreview(title, last.node.cloneNode(true)) },
-      { icon: 'export', label: 'Export', onClick: () => last && last.csv && ui().saveFile(title.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.csv', U.csv(last.csv), 'text/csv') },
+      { icon: 'export', label: 'Export', onClick: () => {
+        if (!last) return;
+        // reports without their own export: save the tables shown on screen
+        const rows = last.csv || [...last.node.querySelectorAll('table')].flatMap((t, i) => [...(i ? [[]] : []), ...[...t.rows].map((r) => [...r.cells].map((c) => c.textContent.trim()))]);
+        if (!rows.length) { ui().toast('This report has nothing to export.'); return; }
+        ui().saveFile(title.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.csv', U.csv(rows), 'text/csv');
+      } },
       '|',
       { icon: 'close', label: 'Close', onClick: () => S.app.reports() },
     ] });
@@ -272,11 +278,11 @@
   function preWeaningMortality() {
     return reportWindow({ title: 'Pre-weaning mortality', subtitle: 'Piglet losses for litters weaned in the period', build: (p) => {
       const L = weanedIn(p); const g = byParity(L);
-      const row = (k, ls) => { const ba = U.sum(ls.map((l) => l.liveBorn + l.fosterIn - l.fosterOut)); const d = U.sum(ls.map((l) => l.deaths)); return [k, ls.length, U.sum(ls.map((l) => l.liveBorn)), U.sum(ls.map((l) => l.fosterIn - l.fosterOut)), d, n1(U.pct(d, ba)), n2(d / (ls.length || 1))]; };
+      const row = (k, ls) => { const ba = U.sum(ls.map((l) => l.liveBorn + l.fosterIn - l.fosterOut)); const d = netDeaths(ls); return [k, ls.length, U.sum(ls.map((l) => l.liveBorn)), U.sum(ls.map((l) => l.fosterIn - l.fosterOut)), d, n1(U.pct(d, ba)), n2(d / (ls.length || 1))]; };
       const rows = PAR_KEYS.filter((k) => g[k].length).map((k) => row(k, g[k]));
       const tot = row('Total', L); tot._cls = 'total';
       const t1 = table(['Parity', 'Litters', 'Born alive', 'Net fostered', 'Deaths', 'Mortality %', 'Deaths / litter'], [...rows, tot]);
-      const causes = {}; L.forEach((l) => Object.entries(l.deathsByCause).forEach(([c, n]) => { causes[c] = (causes[c] || 0) + n; }));
+      const causes = deathCauses(L);
       const totD = U.sum(Object.values(causes));
       const cr = Object.entries(causes).sort((a, b) => b[1] - a[1]).map(([c, n]) => [c, n, n1(U.pct(n, totD))]);
       // by age at death (events)
@@ -401,7 +407,7 @@
       S.store.animals().forEach((a) => {
         const s = S.model.statusAt(a, d);
         if (!s || ['Culled', 'Dead', 'Sold'].includes(s)) return;
-        if (a.sex === 'M') { boars++; return; }
+        if (a.sex === 'M') { if (A(a).entryDate && A(a).entryDate <= d) boars++; return; }
         if (!S.model.isBreedingFemale(a, d)) { unentered++; return; }
         const k = parGroup(S.model.parityAt(a, d));
         counts[s][k] = (counts[s][k] || 0) + 1;
@@ -425,7 +431,7 @@
       S.store.animals().forEach((a) => {
         const r = A(a);
         if (a.sex === 'M') {
-          const arr = a.arrivalDate || a.entryDate || '';
+          const arr = r.entryDate;
           const alive = (d) => arr && arr <= d && !(r.removed && r.removedDate <= d);
           if (alive(begin)) bB++; if (alive(p.end)) eB++;
           if (U.inRange(arr, p.begin, p.end)) bIn++; if (r.removed && U.inRange(r.removedDate, p.begin, p.end)) bOut++;
@@ -521,10 +527,13 @@
       const ms = S.calc.METRICS.filter((m) => m.target);
       const rows = ms.map((m) => {
         const v = m.v(x); const t = tg[m.target]; const pv = m.v(y);
-        const good = Number.isFinite(v) ? (m.lower ? v <= t : v >= t) : null;
-        const gap = Number.isFinite(v) ? v - t : NaN;
-        const chip = h('span.chip.' + (good === null ? 'na' : good ? 'ok' : 'bad'), good === null ? 'no data' : good ? 'on target' : 'below target');
-        return [m.label, m.f(v), String(t), (gap > 0 ? '+' : '') + m.f(gap), m.f(pv), chip];
+        // shaded = outcomes still unknown (e.g. services that cannot have farrowed yet): not compared
+        const shaded = !!(m.shade && m.shade(x));
+        const hasT = t !== undefined && t !== null && t !== '' && Number.isFinite(+t);
+        const good = Number.isFinite(v) && hasT && !shaded ? (m.lower ? v <= t : v >= t) : null;
+        const gap = good === null ? NaN : v - t;
+        const chip = h('span.chip.' + (good === null ? 'na' : good ? 'ok' : 'bad'), shaded && Number.isFinite(v) ? 'not final yet' : !hasT ? 'no target' : good === null ? 'no data' : good ? 'on target' : 'below target');
+        return [m.label, m.f(v), hasT ? String(t) : '', Number.isFinite(gap) ? (gap > 0 ? '+' : '') + m.f(gap) : '', m.f(pv), chip];
       });
       const t = table(['Indicator', 'This period', 'Target', 'Difference', `Previous period`, 'Status'], rows);
       return { node: h('div', h('div.vsum', `Previous period: ${U.fmt(prevB)} – ${U.fmt(prevE)}`), t), csv: t.csv };
@@ -944,8 +953,15 @@
   }
   function deathCauses(W) {
     const causes = {};
-    W.forEach((l) => { Object.entries(l.deathsByCause).forEach(([c, n]) => { causes[c] = (causes[c] || 0) + n; }); if (l.lostAtWean) causes['Not recorded (difference at weaning)'] = (causes['Not recorded (difference at weaning)'] || 0) + l.lostAtWean; });
+    const NR = 'Not recorded (difference at weaning)';
+    W.forEach((l) => { Object.entries(l.deathsByCause).forEach(([c, n]) => { causes[c] = (causes[c] || 0) + n; }); if (l.lostAtWean) causes[NR] = (causes[NR] || 0) + l.lostAtWean; });
+    // more pigs weaned than born alive (unrecorded fostering) makes the difference negative: no deaths to show
+    if (causes[NR] !== undefined && causes[NR] <= 0) delete causes[NR];
     return causes;
+  }
+  /** Piglet deaths of a group of litters: recorded deaths plus pigs missing at weaning, never below zero. */
+  function netDeaths(ls) {
+    return Math.max(0, U.sum(ls.map((l) => l.deaths + (l.lostAtWean || 0))));
   }
   function mortalityReasons() {
     return reportWindow({ title: 'Mortality reasons', subtitle: 'Piglet deaths by cause, litters weaned in the period', build: (p) => {
@@ -960,7 +976,7 @@
       const W = weanedIn(p); const g = {};
       W.forEach((l) => { const k = l.weanDate.slice(0, 7); (g[k] = g[k] || []).push(l); });
       const keys = Object.keys(g).sort();
-      const rows = keys.map((k) => { const ls = g[k]; const start = U.sum(ls.map((l) => l.liveBorn + l.fosterIn - l.fosterOut)); const d = U.sum(ls.map((l) => l.deaths + (l.lostAtWean || 0))); return [k, ls.length, start, d, U.sum(ls.map((l) => l.weaned)), n1(U.pct(d, start))]; });
+      const rows = keys.map((k) => { const ls = g[k]; const start = U.sum(ls.map((l) => l.liveBorn + l.fosterIn - l.fosterOut)); const d = netDeaths(ls); return [k, ls.length, start, d, U.sum(ls.map((l) => l.weaned)), n1(U.pct(d, start))]; });
       const t = table(['Month', 'Litters', 'Born alive + net fostered', 'Deaths', 'Weaned', 'Mortality %'], rows);
       return { node: h('div', ui().lineChart({ labels: keys, series: [{ name: 'Mortality %', values: rows.map((r) => +r[5]) }], yLabel: 'Mortality %', target: S.store.settings.targets.pwm }), t), csv: t.csv };
     } });
@@ -983,7 +999,7 @@
   function pigletParity() {
     return reportWindow({ title: 'Piglet deaths by parity', subtitle: 'Pre-weaning mortality by sow parity, litters weaned in the period', build: (p) => {
       const W = weanedIn(p); const g = byParity(W);
-      const rows = PAR_KEYS.filter((k) => g[k].length).map((k) => { const ls = g[k]; const start = U.sum(ls.map((l) => l.liveBorn + l.fosterIn - l.fosterOut)); const d = U.sum(ls.map((l) => l.deaths + (l.lostAtWean || 0))); return [k, ls.length, start, d, n1(U.pct(d, start)), n2(d / ls.length)]; });
+      const rows = PAR_KEYS.filter((k) => g[k].length).map((k) => { const ls = g[k]; const start = U.sum(ls.map((l) => l.liveBorn + l.fosterIn - l.fosterOut)); const d = netDeaths(ls); return [k, ls.length, start, d, n1(U.pct(d, start)), n2(d / ls.length)]; });
       const t = table(['Parity', 'Litters', 'Born alive + net fostered', 'Deaths', 'Mortality %', 'Deaths / litter'], rows);
       return { node: t, csv: t.csv, chart: () => ui().lineChart({ labels: rows.map((r) => 'P' + r[0]), series: [{ name: 'Mortality %', values: rows.map((r) => +r[4]) }], bars: true }) };
     } });

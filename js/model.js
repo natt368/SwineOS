@@ -32,7 +32,7 @@
     ],
     targets: {
       weanedMbfYear: 30, littersMbfYear: 2.4, totalBorn: 16, bornAlive: 14.5, weanedLitter: 12.5,
-      pwm: 12, farrowRate: 88, wsi: 6, npd: 40, cullRate: 45, mortRate: 6, farrowInterval: 145,
+      pwm: 12, farrowRate: 88, wsi: 6, npd: 40, cullRate: 45, mortRate: 6, farrowInterval: 145, repeatPct: 10,
     },
     actionLists: {
       giltAge: 200, openDays: 0, servicesLast: 28, heat3: 10, heat6: 31, preg1: 28, preg2: 56,

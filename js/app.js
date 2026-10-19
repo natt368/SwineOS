@@ -21,7 +21,7 @@
     },
     home() { app.mount(S.mainMenu.home(), () => app.home()); location.hash === '' || history.replaceState(null, '', location.pathname); },
     reports(section = 'sows') { app.mount(S.reports.menu(section), () => app.reports(section)); },
-    entry() { const w = S.entry.open(); app.mount(w, null); },
+    entry(list) { const w = S.entry.open(list ? { list } : {}); app.mount(w, null); },
     show(fn) { const w = fn(); if (w) app.mount(w, null); },
     openSow(a) {
       const w = S.entry.open();

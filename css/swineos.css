@@ -459,6 +459,13 @@ button { cursor: pointer; }
   .navy-btn { width: 100%; }
   .home-hero { grid-template-columns: 1fr; text-align: center; justify-items: center; }
   .hero-pig { grid-row: auto; }
+  /* sow card on a phone: history scrolls sideways inside its box; quick picks in a tidy grid */
+  .sc2-left, .sc2-hist { max-width: 100vw; }
+  .sc2-hist { overflow-x: auto; }
+  .sc2-bottom { flex-direction: column; align-items: stretch; }
+  .sc2-quick { display: grid; grid-template-columns: repeat(2, 1fr); }
+  .sc2-q { white-space: nowrap; border-color: rgba(255,255,255,.35); font-size: 15px; }
+  .rep-body { overflow-x: auto; max-width: 100vw; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 

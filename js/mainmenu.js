@@ -48,8 +48,8 @@
               ? h('button.mm-link', { type: 'button', onclick: () => S.settingsUI.open('drive') }, `${S.drive.folderLabel()}${S.drive.config.email ? '  (' + S.drive.config.email + ')' : ''}`)
               : h('button.mm-link', { type: 'button', onclick: () => S.settingsUI.open('drive') }, 'Not connected – click to connect')) : null),
           h('div.mm-kpis',
-            tile('breeding females', fem.length, () => S.app.entry()), tile('served', c('Served'), () => S.app.entry()),
-            tile('lactating', c('Lactating'), () => S.app.entry()), tile('open / gilts', c('Open') + c('Gilt'), () => S.app.entry()),
+            tile('breeding females', fem.length, () => S.app.entry('Current')), tile('served', c('Served'), () => S.app.entry('Served')),
+            tile('lactating', c('Lactating'), () => S.app.entry('Lactating')), tile('open / gilts', c('Open') + c('Gilt'), () => S.app.entry('Open')),
             tile('due ≤ 7 d or overdue', due7, () => S.actionLists.open()), tile('ready to wean', wean, () => S.actionLists.open())))),
       h('nav.mm-right', h('h2', 'Reports'),
         B('Sows / Gilts', () => S.app.reports('sows')),

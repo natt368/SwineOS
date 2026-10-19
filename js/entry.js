@@ -475,7 +475,7 @@
   function open(opts = {}) {
     const gilt = opts.mode === 'gilt';
     const tabs = gilt ? GILT_TABS : TAB_ORDER;
-    const st = { tab: gilt ? 'entry' : 'mate', list: gilt ? 'Gilts due for mating' : 'Current', sel: null, histSel: null, lt: false, search: null };
+    const st = { tab: gilt ? 'entry' : 'mate', list: opts.list || (gilt ? 'Gilts due for mating' : 'Current'), sel: null, histSel: null, lt: false, search: null };
     const win = ui().appWindow({ title: gilt ? 'Gilt pool' : 'Sow data entry', cls: 'entry-win', toolbar: [] });
     win.querySelector('.toolbar').remove();
     const listTabs = gilt ? ['Gilts due for mating', 'Gilts mated', 'Gilts culled'] : ['Served', 'Lactating', 'Open', 'Active', 'Removed', 'All', 'Current'];
