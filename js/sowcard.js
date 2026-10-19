@@ -112,13 +112,19 @@
       h('div.sc2-lists', h('div', availHead, avail), arrows, h('div', selHead, chosen)));
 
     // ---- bottom bar: quick picks
-    const from = ui().dateInput('sc2-from', st.from, { onchange: (e) => { st.from = e.target.value; } });
-    const to = ui().dateInput('sc2-to', st.to, { onchange: (e) => { st.to = e.target.value; } });
+    const from = ui().dateInput('sc2-from', st.from, { onchange: (e) => { st.from = e.target.value; if (st.filter === 'due') dueToFarrow(); } });
+    const to = ui().dateInput('sc2-to', st.to, { onchange: (e) => { st.to = e.target.value; if (st.filter === 'due') dueToFarrow(); } });
     const quick = [['Mating +21', 'mate', 21], ['Mating +35', 'mate', 35], ['Mating +42', 'mate', 42], ['Mating +60', 'mate', 60], ['Due date -15', 'due', -15], ['Due date -10', 'due', -10], ['Due date -5', 'due', -5]];
     const bottom = h('div.sc2-bottom',
       h('div.sc2-quick', quick.map(([l, k, d]) => h('button.sc2-q', { type: 'button', title: k === 'mate' ? `Sows served ${d} days before a day in From – To` : `Sows due to farrow ${-d} days after a day in From – To`, onclick: () => quickPick(k, d, l) }, l))),
       h('div.sc2-filter',
-        h('label', h('span', 'Filter type'), ui().select('sc2-ft', [['all', 'All'], ['gilts', 'Gilts (parity 0)'], ['sows', 'Sows (parity 1+)']], st.filter, { onchange: (e) => { st.filter = e.target.value; } })),
+        h('label', h('span', 'Filter type'), ui().select('sc2-ft', [['all', 'All'], ['gilts', 'Gilts (parity 0)'], ['sows', 'Sows (parity 1+)'], ['due', 'Sows due to farrow']], st.filter, { onchange: (e) => {
+          st.filter = e.target.value;
+          if (st.filter === 'due') {
+            if (st.to <= U.today()) { st.from = U.today(); st.to = U.addDays(U.today(), 7); from.value = st.from; to.value = st.to; }
+            dueToFarrow();
+          } else { st.dueMode = false; renderLists(); }
+        } })),
         h('label', h('span', 'From'), from), h('label', h('span', 'To'), to)));
 
     win.appendChild(h('div.sc2-body', left, right));
@@ -138,9 +144,14 @@
       avail.innerHTML = '';
       p.filter((a) => !selSet.has(a.uid)).forEach((a) => avail.appendChild(h('option', { value: a.uid, selected: st.current && st.current.uid === a.uid ? 'selected' : null }, a.id)));
       chosen.innerHTML = '';
-      st.selected.map((u) => S.store.get(u)).filter(Boolean).forEach((a) => chosen.appendChild(h('option', { value: a.uid }, a.id)));
+      const gestL = S.store.settings.gestationLength;
+      st.selected.map((u) => S.store.get(u)).filter(Boolean).forEach((a) => {
+        const r = A(a);
+        const label = st.dueMode && r.lastService ? `${a.id}   due ${U.fmt(U.addDays(r.lastService.date, gestL)).replace(/\/\d{4}$/, '')}` : a.id;
+        chosen.appendChild(h('option', { value: a.uid }, label));
+      });
       availHead.textContent = `Available ${avail.options.length}`;
-      selHead.textContent = `Selected ${chosen.options.length}`;
+      selHead.textContent = st.dueMode ? `Due to farrow ${chosen.options.length}` : `Selected ${chosen.options.length}`;
       groupBtn.textContent = st.group ? 'Group: ' + st.group : 'Group';
     }
     function show(uid) { const a = S.store.get(uid); if (a) { st.current = a; renderCard(); } }
@@ -160,7 +171,23 @@
         { label: 'Cancel' },
       ] });
     }
+    /** Filter type "Sows due to farrow": served sows whose due date falls in From – To, earliest first. */
+    function dueToFarrow() {
+      if (st.from > st.to) { ui().toast('From is after To.', 'error'); return; }
+      const gest = S.store.settings.gestationLength;
+      const due = (a) => U.addDays(A(a).lastService.date, gest);
+      const hits = S.store.animals().filter((a) => {
+        const r = A(a);
+        return a.sex === 'F' && !r.removed && r.status === 'Served' && r.lastService && r.lastService.pregCheck !== '-' && U.inRange(due(a), st.from, st.to);
+      }).sort((x, y) => (due(x) < due(y) ? -1 : due(x) > due(y) ? 1 : U.natCmp(x.id, y.id)));
+      st.dueMode = true;
+      st.selected = hits.map((a) => a.uid);
+      renderLists();
+      if (hits.length) show(hits[0].uid);
+      ui().toast(`${hits.length} sows due to farrow ${U.fmt(st.from)} – ${U.fmt(st.to)}.`);
+    }
     function quickPick(kind, d, label) {
+      st.dueMode = false;
       if (st.from > st.to) { ui().toast('From is after To.', 'error'); return; }
       const gest = S.store.settings.gestationLength;
       const ft = st.filter;
@@ -168,7 +195,7 @@
         const r = A(a);
         if (a.sex !== 'F' || r.status !== 'Served' || !r.lastService) return false;
         if (ft === 'gilts' && r.parity > 0) return false;
-        if (ft === 'sows' && r.parity === 0) return false;
+        if (ft === 'sows' && r.parity === 0) return false; // 'due' and 'all' take every served sow
         const ref = kind === 'mate' ? U.addDays(r.lastService.date, d) : U.addDays(U.addDays(r.lastService.date, gest), d);
         return U.inRange(ref, st.from, st.to);
       }).sort((x, y) => U.natCmp(x.id, y.id));
