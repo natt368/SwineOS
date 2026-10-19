@@ -11,8 +11,7 @@
       b('sow', 'SwineOS', () => S.app.home(), active === 'litter'),
       b('backup', 'PigMAIN', () => S.app.show(pigMain), active === 'main'),
       b('find', 'Selfservice', selfService),
-      b('help', 'Help', () => S.app.help('home')),
-      h('span.gd-spacer'), S.drive.statusChip());
+      b('help', 'Help', () => S.app.help('home')));
   }
 
   function home() {

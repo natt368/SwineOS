@@ -14,6 +14,7 @@
       root.innerHTML = '';
       if (S.store.settings.demo) root.appendChild(h('div.demo-banner', 'EXAMPLE DATA – this herd was generated for trying the program. Clear it under Settings → Backup & data before entering your own animals.'));
       root.appendChild(win);
+      S.safety.attach(win);
       app.current = win;
       rerenderFn = rerender || null;
       window.scrollTo(0, 0);
@@ -80,6 +81,7 @@
     if (window.claude) document.documentElement.classList.add('in-artifact');
     root.innerHTML = '<div class="loading">Loading herd records…</div>';
     await S.store.init();
+    S.safety.start();
     S.mainMenu.applyScale();
     S.mainMenu.applyPrint();
     let lastCount = -1;

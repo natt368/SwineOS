@@ -374,5 +374,5 @@
     return el;
   }
 
-  S.drive = { startup, backupNow, sync, pane, statusChip, configured, available, get config() { return cfg; }, status };
+  S.drive = { startup, backupNow, sync, pane, statusChip, configured, available, get config() { return cfg; }, status, onStatus: (fn) => { statusListeners.add(fn); return () => statusListeners.delete(fn); }, reconnect: reconnectBanner };
 })(window.SOS);

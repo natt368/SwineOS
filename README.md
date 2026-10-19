@@ -63,13 +63,27 @@ Piglets lost between farrowing and weaning that were never entered as deaths are
 - **Hosted on GitHub Pages or opened as a file:** records are stored in that browser on that computer (IndexedDB). Use *Settings → Backup & data → Download backup* regularly; the backup file can be restored on another computer.
 - **Opened as a claude.ai Artifact:** records are stored in the Artifact's shared online database, so every computer or phone that opens the link sees the same herd.
 
+## Is my data safe?
+
+Every window shows a badge in its blue title bar:
+
+| Badge | Meaning |
+| --- | --- |
+| Green cloud with a tick – *Backed up* / *Saved online* | Saved and backed up to Google Drive (website) or to the shared online database (claude.ai link) |
+| Blue spinning arrows – *Saving…* / *Backing up…* | A save or backup is happening right now |
+| Amber – *Backing up soon* | Saved on this computer; goes to Google Drive within a minute |
+| Amber – *This computer only* / *Backup paused* | Saved in this browser only: Google Drive is not set up, or its sign-in expired |
+| Red – *Not saved* | A save failed; download a backup file |
+
+Click the badge for details (last save, last Google Drive backup, last downloaded backup file) and for *Back up now* / *Download backup file*.
+
 ## Google Drive backup
 
 On the website version (GitHub Pages), **Settings → Google Drive** connects a Google account and a Drive folder:
 
 - One minute after every change, the herd is backed up to `SwineOS backup - <farm>.json.gz` in that folder (gzip-compressed, about 10 % of the JSON size), plus a dated copy for each day (the last 14 are kept; adjustable).
 - When SwineOS opens, it loads the newest backup from the folder. Every 10 minutes, and when you come back to the tab, it checks for backups made on another computer. If both computers changed the records, it asks which to keep and saves the other version as a *conflict copy*.
-- The status chip at the bottom of the main menu shows when the last backup was made.
+- The badge in every window's title bar shows when the last backup was made.
 
 One-time set-up: Google requires an OAuth Client ID for the site. In console.cloud.google.com create a project, enable the **Google Drive API**, set up the **OAuth consent screen** (External, add your Google address as a test user), then create an **OAuth client ID → Web application** with `https://natt368.github.io` as an authorized JavaScript origin. Paste the Client ID in Settings → Google Drive, or put it in `js/config.js` so every computer has it. Google shows an "unverified app" warning the first time: choose Continue.
 
@@ -94,6 +108,7 @@ The workflow in `.github/workflows/pages.yml` publishes the default branch. Unti
 | `js/pigwin-import.js` | Reads PigWIN `.BDR` backups (zip + Paradox tables) |
 | `js/actionentry.js` | Action list entry |
 | `js/reportgen.js` | Report generator |
+| `js/safety.js` | The "data is safe" badge in every title bar |
 | `js/drive.js`, `js/config.js` | Google Drive backup and sync; site configuration (Google Client ID) |
 | `js/mainmenu.js` | Main menu, PigMAIN set-up options, data checks |
 | `js/actionlists.js` | Action lists dialog and printout |

@@ -221,6 +221,7 @@
 
   /* ---------- saving files ---------- */
   async function saveFile(filename, text, mime = 'text/plain') {
+    if (/^swineos-backup/i.test(filename) && S.safety) setTimeout(() => S.safety.markDownload(), 0);
     try {
       if (window.claude && window.claude.use) {
         const dl = await Promise.race([window.claude.use('downloads'), new Promise((r) => setTimeout(() => r(null), 1500))]);

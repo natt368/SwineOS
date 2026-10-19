@@ -19,6 +19,10 @@
   };
   const listeners = new Set();
   const changeListeners = new Set(); // user changes only (not loads)
+  // where saving stands, for the "data is safe" badge
+  const saveState = { pending: 0, localPending: false, error: '', lastSaved: '' };
+  const saveListeners = new Set();
+  function saveNotify() { saveListeners.forEach((fn) => { try { fn(saveState); } catch (e) { console.error(e); } }); }
   function changed() {
     state.savedAt = new Date().toISOString();
     changeListeners.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
@@ -82,29 +86,36 @@
     state.log = (raw && raw.log) || [];
     state.savedAt = (raw && raw.savedAt) || '';
   }
-  const saveLocal = U.debounce(async () => {
+  function saveLocal() { saveState.localPending = true; saveNotify(); saveLocalNow(); }
+  const saveLocalNow = U.debounce(async () => {
     const data = { savedAt: state.savedAt, settings: state.settings, animals: [...state.animals.values()], log: state.log.slice(-2000) };
     try {
       await idbPut(LS_KEY, data);
       try { localStorage.removeItem(LS_KEY); } catch (e) { /* ignore */ }
+      saveState.error = ''; saveState.lastSaved = new Date().toISOString();
     } catch (e) {
-      try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch (e2) {
+      try { localStorage.setItem(LS_KEY, JSON.stringify(data)); saveState.error = ''; saveState.lastSaved = new Date().toISOString(); } catch (e2) {
+        saveState.error = 'Could not save in this browser: ' + e2.message;
         S.ui && S.ui.toast('Could not save in this browser: ' + e2.message + '. Download a backup now.', 'error');
       }
     }
+    saveState.localPending = false; saveNotify();
   }, 250);
 
   /* ---------------- cloud backend ---------------- */
   async function withRetry(fn, tries = 5) {
     let wait = 400;
-    for (let i = 0; ; i++) {
-      try { return await fn(); } catch (e) {
-        const code = e && e.code;
-        if (i >= tries - 1 || !(code === 'resource_exhausted' || code === 'unavailable')) throw e;
-        await new Promise((r) => setTimeout(r, wait));
-        wait *= 2;
+    saveState.pending++; saveNotify();
+    try {
+      for (let i = 0; ; i++) {
+        try { const r = await fn(); saveState.error = ''; saveState.lastSaved = new Date().toISOString(); return r; } catch (e) {
+          const code = e && e.code;
+          if (i >= tries - 1 || !(code === 'resource_exhausted' || code === 'unavailable')) { saveState.error = (e && (e.message || e.code)) || 'save failed'; throw e; }
+          await new Promise((r) => setTimeout(r, wait));
+          wait *= 2;
+        }
       }
-    }
+    } finally { saveState.pending--; saveNotify(); }
   }
   async function pool(items, worker, size = 4, onProgress) {
     let i = 0; let done = 0;
@@ -166,6 +177,9 @@
     onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     /** Called after every change a user makes (for automatic backups). */
     onLocalChange(fn) { changeListeners.add(fn); return () => changeListeners.delete(fn); },
+    /** Saving progress (pending writes, last error, last saved time) for the safety badge. */
+    onSaveState(fn) { saveListeners.add(fn); return () => saveListeners.delete(fn); },
+    saveState,
     get settings() { return state.settings; },
     animals() { return [...state.animals.values()]; },
     get(uid) { return state.animals.get(uid); },
