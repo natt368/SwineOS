@@ -62,14 +62,32 @@
       const backs = document.querySelectorAll('.modal-back');
       if (backs[backs.length - 1] !== back) return; // only the top dialog reacts to keys
       if (e.key === 'Escape') close();
-      if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'SELECT') {
-        const p = buttons.find((b) => b.primary);
-        if (p) { e.preventDefault(); foot.querySelector('.primary').click(); }
+      if (e.key === 'Enter' && !e.isComposing && ['INPUT', 'SELECT'].includes(e.target.tagName) && content.contains(e.target)) {
+        // Enter walks down the form: next field, and from the last field to the main button (Enter there saves).
+        // A dialog with a single field saves straight away.
+        const fs = fields(); const i = fs.indexOf(e.target);
+        const primary = foot.querySelector('.primary');
+        e.preventDefault();
+        if (fs.length > 1 && i >= 0 && i < fs.length - 1) { const n = fs[i + 1]; n.focus(); selectAll(n); }
+        else if (fs.length > 1 && primary) primary.focus();
+        else if (primary) primary.click();
       }
     };
+    /** Fields the cursor can go to, in screen order. */
+    const fields = () => [...content.querySelectorAll('input:not([type=hidden]):not([disabled]):not([readonly]),select:not([disabled]),textarea:not([disabled])')].filter((f) => f.offsetParent !== null);
+    // text already in a field is highlighted, so typing replaces it (dates are left alone: they are changed by hand)
+    content.addEventListener('focusin', (e) => {
+      const f = e.target;
+      selectAll(f); setTimeout(() => { if (document.activeElement === f) selectAll(f); }, 0);
+    });
+    function selectAll(f) { if (f.tagName === 'INPUT' && !['date', 'checkbox', 'radio', 'file', 'button'].includes(f.type)) try { f.select(); } catch (err) { /* not selectable */ } }
     // attach after the current event finishes, so the Enter that opened the dialog does not submit it
     setTimeout(() => { if (back.isConnected) document.addEventListener('keydown', key); }, 0);
-    setTimeout(() => { const f = box.querySelector('input:not([type=hidden]):not([disabled]),select,textarea'); if (f) { f.focus(); if (f.select) try { f.select(); } catch (e) { /* not selectable */ } } }, 30);
+    setTimeout(() => {
+      const fs = fields();
+      const f = fs.find((x) => x.type !== 'date') || fs[0];
+      if (f) f.focus();
+    }, 30);
     return { close, box, content };
   }
 

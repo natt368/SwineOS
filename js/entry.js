@@ -233,6 +233,30 @@
     const lastDate = others.events.length ? others.events.map((x) => x.date).sort().pop() : '';
     if (lastDate && ev.date < lastDate && !editingEid) warnings.push(`The last event for ${a.id} is on ${U.fmt(lastDate)}; this one is earlier.`);
     const s = rb.status;
+    // Duplicates: the same kind of event cannot be recorded again sooner than is possible.
+    // Delete the earlier event first if it was entered by mistake.
+    const gestL = S.store.settings.gestationLength || 115;
+    const label = (t) => ((S.EVENTS[t] || {}).label || t).toLowerCase();
+    const orig = editingEid ? (a.events || []).find((x) => x.eid === editingEid) : null;
+    const MIN_DAYS = { farrow: gestL, mate: S.store.settings.minRepeatServiceDays || 17, preg: 7, abort: 30, heat: 1, vboar: 1, synch: 1 };
+    if (MIN_DAYS[ev.type]) {
+      const win = S.store.settings.serviceWindowDays || 6;
+      const clash = others.events.find((x) => x.type === ev.type && Math.abs(U.diff(ev.date, x.date)) < MIN_DAYS[ev.type]
+        // editing one mating of a multi-mating service: its partners in the same service are fine
+        && !(ev.type === 'mate' && orig && Math.abs(U.diff(x.date, orig.date)) <= win));
+      if (clash) {
+        const d = Math.abs(U.diff(ev.date, clash.date));
+        errors.push(`${a.id} already has a ${label(ev.type)} on ${U.fmt(clash.date)}${d ? ` (${d} day${d === 1 ? '' : 's'} apart)` : ' (the same day)'}. `
+          + (ev.type === 'farrow' ? `Farrowings must be at least one gestation length (${gestL} days) apart.`
+            : ev.type === 'mate' ? `A repeat service must be at least ${MIN_DAYS.mate} days later. For several matings in one heat, use the 2nd / 3rd mating boxes when entering the first mating.`
+              : MIN_DAYS[ev.type] > 1 ? `They must be at least ${MIN_DAYS[ev.type]} days apart.` : 'Only one per day.')
+          + ' If the earlier one is wrong, delete it first.');
+      }
+    } else if (!['location', 'editid', 'remove'].includes(ev.type)) {
+      // same event with the same details on the same day: probably entered twice
+      const same = others.events.find((x) => x.type === ev.type && x.date === ev.date && ['count', 'cause', 'otherSow', 'disease', 'treatment', 'vaccine', 'score', 'backfat'].every((k) => String(x[k] ?? '') === String(ev[k] ?? '')));
+      if (same) warnings.push(`This ${label(ev.type)} (${U.fmt(ev.date)}${ev.count ? ', ' + ev.count : ''}) is already recorded for ${a.id}. Is it a second one?`);
+    }
     switch (ev.type) {
       case 'mate':
         if (a.sex === 'M') errors.push('Matings are recorded on the female.');
@@ -248,7 +272,8 @@
         if (s !== 'Served') warnings.push(`Status on this date is ${s}, not Served. The litter will have no service record.`);
         if (rb.lastService && s === 'Served') {
           const g = U.diff(ev.date, rb.lastService.date);
-          if (g < 105 || g > 125) warnings.push(`Gestation length would be ${g} days.`);
+          if (g < gestL - 15) errors.push(`${a.id} was served on ${U.fmt(rb.lastService.date)}: a farrowing ${g} days later is not possible (gestation is about ${gestL} days). Check the date or the sow ID.`);
+          else if (g < 105 || g > 125) warnings.push(`Gestation length would be ${g} days.`);
         }
         const tb = (ev.liveBorn || 0) + (ev.stillborn || 0) + (ev.mummies || 0);
         if (tb === 0) warnings.push('Total born is 0.');

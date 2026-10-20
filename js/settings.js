@@ -41,6 +41,7 @@
         ui().field('Target lactation (days)', num(s, 'targetLactation', { min: 10, max: 40 })),
         ui().field('Gilt age for service list (days)', num(s, 'giltEntryAge', { min: 120, max: 400 })),
         ui().field('Matings up to … days after the first mating are one service', num(s, 'serviceWindowDays', { min: 1, max: 10 }), 'PigWIN uses 6: a mating 7 or more days after the first one is a repeat service.'),
+        ui().field('A repeat service at least … days later', num(s, 'minRepeatServiceDays', { min: 7, max: 30 }), 'A new mating sooner than this after another mating is refused as a duplicate (default 17).'),
         h('p.hint', `Data is stored ${S.store.state.backend === 'cloud' ? 'in the shared online database – everyone with access to this app sees the same herd.' : 'in this web browser on this computer. Download a backup regularly (Backup & data).'}`)),
       codes: () => h('div.codes-edit', LIST_NAMES.map(([k, label]) => h('label.code-list', h('span.flabel', label),
         h('textarea', { rows: 6, onchange: (e) => { s.lists[k] = e.target.value.split('\n').map((x) => x.trim()).filter((x, i) => x || (k === 'technicians' && i === 0)); } }, (s.lists[k] || []).join('\n')))), h('p.hint', 'One entry per line.')),

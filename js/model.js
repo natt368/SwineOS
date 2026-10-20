@@ -11,6 +11,7 @@
     weanAge: 21, // planned weaning age (days): Sows to be weaned
     targetLactation: 21,
     giltEntryAge: 200,
+    minRepeatServiceDays: 17, // a new mating sooner than this after another one is refused as a duplicate
     serviceWindowDays: 6, // as PigWIN: matings up to this many days after a service's first mating belong to it
     demo: false,
     lists: {
