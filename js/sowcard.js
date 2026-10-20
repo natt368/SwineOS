@@ -213,7 +213,7 @@
 
     // ---- right: info cells + selection lists
     const info = h('div.sc2-info');
-    const selSelect = ui().select('sc2-sel', SELECTIONS, st.sel, { onchange: (e) => { st.sel = e.target.value; renderLists(); } });
+    const selSelect = ui().select('sc2-sel', SELECTIONS, st.sel, { onchange: (e) => { st.sel = e.target.value; if (st.filter !== 'all') applyFilter(); else renderLists(); } });
     const groupBtn = h('button.wbtn', { type: 'button', onclick: pickGroup }, 'Group');
     const availHead = h('div.sc2-lh'); const selHead = h('div.sc2-lh');
     const avail = h('select.sc2-list', { size: 18, 'aria-label': 'Available sows', onchange: (e) => show(e.target.value), ondblclick: () => addOne() });
@@ -254,8 +254,13 @@
         active: (r) => !r.removed, served: (r) => r.status === 'Served', lactating: (r) => r.status === 'Lactating', open: (r) => r.status === 'Open',
         gilts: (r) => r.status === 'Gilt', removed: (r) => r.removed, all: () => true,
       }[st.sel];
+      return all.filter((a) => f(A(a)) && (!st.group || A(a).location === st.group)).sort((x, y) => U.natCmp(x.id, y.id));
+    }
+    /** Sows matching Filter type and From – To (within the Selection, except Sows removed). */
+    function filtered() {
       const ft = filterFn();
-      const out = all.filter((a) => (st.filter === 'removed' ? true : f(A(a))) && ft(a, A(a)) && (!st.group || A(a).location === st.group));
+      const base = st.filter === 'removed' ? S.store.animals().filter((a) => a.sex === 'F' && (!st.group || A(a).location === st.group)) : pool();
+      const out = base.filter((a) => ft(a, A(a)));
       if (st.filter === 'due') return out.sort((x, y) => dueOf(x).localeCompare(dueOf(y)) || U.natCmp(x.id, y.id));
       return out.sort((x, y) => U.natCmp(x.id, y.id));
     }
@@ -280,27 +285,29 @@
         wean: (a, r) => { if (r.status !== 'Lactating' || !r.currentLitter) return false; const d = U.addDays(r.currentLitter.farrowDate, weanAge); return inR(d) || (d < st.from && st.from <= U.today()); },
       }[st.filter] || (() => true);
     }
+    /** Filter type, then From and To: the matching sows go into the Selected list. All clears it. */
     function applyFilter() {
       if (st.from > st.to) { ui().toast('From is after To.', 'error'); return; }
-      st.dueMode = false;
+      if (st.filter === 'all') { st.selected = []; renderLists(); return; }
+      const hits = filtered();
+      st.selected = hits.map((a) => a.uid);
       renderLists();
-      const first = avail.options[0];
-      if (st.filter !== 'all' && st.filter !== 'active' && first) show(first.value);
+      if (hits.length) show(hits[0].uid);
     }
     function renderLists() {
       const p = pool();
       const selSet = new Set(st.selected);
       avail.innerHTML = '';
-      p.filter((a) => !selSet.has(a.uid)).forEach((a) => avail.appendChild(h('option', { value: a.uid, selected: st.current && st.current.uid === a.uid ? 'selected' : null }, st.filter === 'due' ? `${a.id}   due ${U.fmt(dueOf(a)).replace(/\/\d{4}$/, '')}` : a.id)));
+      p.filter((a) => !selSet.has(a.uid)).forEach((a) => avail.appendChild(h('option', { value: a.uid, selected: st.current && st.current.uid === a.uid ? 'selected' : null }, a.id)));
       chosen.innerHTML = '';
       const gestL = S.store.settings.gestationLength;
       st.selected.map((u) => S.store.get(u)).filter(Boolean).forEach((a) => {
         const r = A(a);
-        const label = st.dueMode && r.lastService ? `${a.id}   due ${U.fmt(U.addDays(r.lastService.date, gestL)).replace(/\/\d{4}$/, '')}` : a.id;
-        chosen.appendChild(h('option', { value: a.uid }, label));
+        const label = st.filter === 'due' && r.lastService ? `${a.id}   due ${U.fmt(U.addDays(r.lastService.date, gestL)).replace(/\/\d{4}$/, '')}` : a.id;
+        chosen.appendChild(h('option', { value: a.uid, selected: st.current && st.current.uid === a.uid ? 'selected' : null }, label));
       });
       availHead.textContent = `Available ${avail.options.length}`;
-      selHead.textContent = st.dueMode ? `Due to farrow ${chosen.options.length}` : `Selected ${chosen.options.length}`;
+      selHead.textContent = `Selected ${chosen.options.length}`;
       groupBtn.textContent = st.group ? 'Group: ' + st.group : 'Group';
     }
     function show(uid) { const a = S.store.get(uid); if (a) { st.current = a; renderCard(); } }
