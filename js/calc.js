@@ -424,6 +424,29 @@
     return out;
   }
 
+  /**
+   * Begin – end period split into calendar columns: months (or weeks from Monday, quarters, years, days),
+   * the first and last cut to the begin and end dates. 1/1 – 9/30 by month gives 9 columns.
+   */
+  function splitPeriod(begin, end, len = 1, unit = 'Month(s)', max = 60) {
+    const startOf = (d) => {
+      if (unit === 'Day(s)') return d;
+      if (unit === 'Week(s)') return U.weekStart(d);
+      const y = +d.slice(0, 4); const m = +d.slice(5, 7);
+      const mm = unit === 'Quarter(s)' ? Math.floor((m - 1) / 3) * 3 + 1 : unit === 'Year(s)' ? 1 : m;
+      return `${y}-${String(mm).padStart(2, '0')}-01`;
+    };
+    const next = (d) => (unit === 'Day(s)' ? U.addDays(d, len) : unit === 'Week(s)' ? U.addDays(d, 7 * len) : U.addMonths(d, (unit === 'Quarter(s)' ? 3 : unit === 'Year(s)' ? 12 : 1) * len));
+    const out = [];
+    let s = startOf(begin);
+    while (s <= end && out.length < max) {
+      const n = next(s);
+      out.push([s < begin ? begin : s, U.addDays(n, -1) > end ? end : U.addDays(n, -1)]);
+      s = n;
+    }
+    return out;
+  }
+
   /** One record per litter for the analysis tools. */
   function litterRecords(b, e) {
     const c = collect();
@@ -452,5 +475,5 @@
     ['location', 'Farrowing location', 'c'], ['boar', 'Boar', 'c'], ['month', 'Farrowing month', 'c'],
   ];
 
-  S.calc = { LAYOUT, metricsFor, collect, periodStats, periods, METRICS, TABS, litterRecords, LITTER_FIELDS, productive, overlap };
+  S.calc = { splitPeriod, LAYOUT, metricsFor, collect, periodStats, periods, METRICS, TABS, litterRecords, LITTER_FIELDS, productive, overlap };
 })(window.SOS);

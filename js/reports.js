@@ -98,10 +98,12 @@
     const body = h('div.rep-body');
     const note = h('div.rep-note', h('i.shade-key'), 'Results in shaded area may be biased by incomplete data for some breeding females');
     const tabs = h('div.rep-tabs', S.calc.TABS.map(([k, l]) => h('button.rtab', { type: 'button', 'data-k': k, onclick: () => { p.tab = k; run(); } }, l)));
-    const begin = ui().dateInput('hp-begin', p.begin, { onchange: (e) => { p.begin = e.target.value; p.option = 'Period'; U.$('#hp-opt').value = 'Period'; run(); } });
-    const end = ui().dateInput('hp-end', p.end, { onchange: (e) => { p.end = e.target.value; run(); } });
+    // picking dates switches to Begin – end period, one column per month (as in PigWIN)
+    const toPeriod = () => { if (p.option !== 'Period') { p.option = 'Period'; U.$('#hp-opt').value = 'Period'; p.len = 1; p.unit = 'Month(s)'; U.$('#hp-len').value = 1; U.$('#hp-unit').value = p.unit; } };
+    const begin = ui().dateInput('hp-begin', p.begin, { onchange: (e) => { p.begin = e.target.value; toPeriod(); run(); } });
+    const end = ui().dateInput('hp-end', p.end, { onchange: (e) => { p.end = e.target.value; if (U.$('#hp-opt').value === 'Period') toPeriod(); run(); } });
     const panel = h('div.rep-panel.hp-panel',
-      ui().field('Report Option', ui().select('hp-opt', [['Seasonal', 'Seasonal'], ['Period', 'Begin – end period']], p.option, { onchange: (e) => { p.option = e.target.value; run(); } })),
+      ui().field('Report Option', ui().select('hp-opt', [['Seasonal', 'Seasonal'], ['Period', 'Begin – end period']], p.option, { onchange: (e) => { p.option = e.target.value; if (p.option === 'Period' && p.unit === 'Year(s)') { p.unit = 'Month(s)'; p.len = 1; U.$('#hp-unit').value = p.unit; U.$('#hp-len').value = 1; } run(); } })),
       ui().field('Columns', ui().input('hp-cols', p.cols, { type: 'number', min: 1, max: 24, onchange: (e) => { p.cols = Math.max(1, Math.min(24, +e.target.value || 1)); run(); } }), 'periods'),
       ui().field('No. / period length', h('span.inline', ui().input('hp-len', p.len, { type: 'number', min: 1, max: 99, onchange: (e) => { p.len = Math.max(1, +e.target.value || 1); run(); } }),
         ui().select('hp-unit', ['Day(s)', 'Week(s)', 'Month(s)', 'Quarter(s)', 'Year(s)'], p.unit, { onchange: (e) => { p.unit = e.target.value; run(); } }))),
@@ -112,7 +114,10 @@
     win.append(head, body, seriesBar, note, tabs, panel);
 
     function run() {
-      if (p.option === 'Period') { p.periods = [[p.begin, p.end]]; }
+      if (p.option === 'Period') {
+        if (p.begin > p.end) { ui().toast('Begin date is after the end date.', 'error'); return; }
+        p.periods = S.calc.splitPeriod(p.begin, p.end, p.len, p.unit);
+      }
       else {
         p.periods = S.calc.periods(p.end, p.cols, p.len, p.unit);
         p.begin = p.periods[0][0]; begin.value = p.begin;
