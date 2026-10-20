@@ -216,8 +216,13 @@ button { cursor: pointer; }
 .entry-win { min-height: 100vh; }
 @media (min-width: 901px) {
   /* fixed to the screen height so the history scrolls inside its box (flex: 1 let it grow with the content) */
-  .entry-win { flex: none; height: 100vh; min-height: 0; }
-  .demo-banner + .entry-win { height: calc(100vh - 25px); }
+  .entry-win, .card-win, .report-win, .ale-win { flex: none; height: 100vh; min-height: 0; }
+  .demo-banner + .entry-win, .demo-banner + .card-win, .demo-banner + .report-win, .demo-banner + .ale-win { height: calc(100vh - 25px); }
+  /* sow cards: only the teal history scrolls; the header and the blue bar at the bottom stay put */
+  .sc2-body, .sc2-left { min-height: 0; overflow: hidden; }
+  .sc2-hist { min-height: 120px; }
+  .sc2-right { overflow-y: auto; }
+  .rep-body { min-height: 120px; }
   .entry-body, .entry-left { min-height: 0; overflow: hidden; }
   .entry-right { overflow: auto; }
   .hist-host { min-height: 120px; }
