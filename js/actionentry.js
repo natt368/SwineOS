@@ -91,7 +91,7 @@
             if (kind === 'ro') { tr.appendChild(h('td', { class: typeof r[key] === 'number' ? 'num' : null }, r[key] ?? '')); return; }
             let inp;
             const onIn = (e) => { r[key] = e.target.value; if (key !== 'date' && e.target.value !== '' && !r.date) { r.date = defaultDate(); const d = tr.querySelector('input[type=date]'); if (d) d.value = r.date; } tr.classList.toggle('filled', isFilled(r)); };
-            if (kind === 'date') inp = h('input', { type: 'date', value: r.date || '', max: U.today(), oninput: onIn });
+            if (kind === 'date') inp = h('input', { type: 'date', value: r.date || '', max: S.entry.maxDate(st.tab === 'mixed' ? r.type || 'wean' : st.tab), oninput: onIn });
             else if (kind === 'num') inp = h('input', { type: 'number', inputmode: 'numeric', value: r[key] ?? '', placeholder: '0', oninput: onIn, step: key === 'kg' ? '0.1' : '1' });
             else if (kind === 'boar') inp = h('input', { value: r[key] || '', list: 'ale-boars', oninput: onIn, autocomplete: 'off' });
             else if (Array.isArray(kind)) inp = ui().select(null, kind, r[key] ?? (key === 'kind' ? 'cull' : key === 'ev' ? 'heat' : ''), { onchange: onIn });

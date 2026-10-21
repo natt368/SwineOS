@@ -87,7 +87,7 @@
     const L = S.store.settings.lists;
     const r = A(a);
     const e = existing || {};
-    const date = ui().dateInput('f-date', e.date || defaultDate(), { max: U.today() });
+    const date = ui().dateInput('f-date', e.date || defaultDate(), { max: maxDate(type) });
     const remarks = ui().input('f-remarks', e.remarks || '', { maxlength: 120 });
     const rows = [ui().field('Date', date)];
     const get = {};
@@ -217,6 +217,10 @@
     return { node: h('div.form', info, rows), read };
   }
 
+  // weaning is often entered before the pigs leave: it may be dated ahead (days)
+  const FUTURE_OK = { wean: 30, partwean: 30 };
+  function maxDate(type) { return U.addDays(U.today(), FUTURE_OK[type] || 0); }
+
   /** Validate an event against the animal. Returns {errors:[], warnings:[]} */
   function validate(a, ev, editingEid) {
     const errors = []; const warnings = [];
@@ -226,7 +230,7 @@
     const before = { ...a, events: others.events.filter((x) => x.date <= ev.date) };
     const rb = S.model.analyze(before);
     if (!ev.date) errors.push('Enter a date.');
-    if (ev.date > U.today()) errors.push('The date is in the future.');
+    if (ev.date > maxDate(ev.type)) errors.push(FUTURE_OK[ev.type] ? `${(S.EVENTS[ev.type] || {}).label || 'This event'} can be dated at most ${FUTURE_OK[ev.type]} days ahead.` : 'The date is in the future.');
     if (a.birthDate && ev.date < a.birthDate) errors.push('The date is before the animal was born.');
     if (r.removed && r.removedDate < ev.date && ev.type !== 'remove') errors.push(`${a.id} was removed on ${U.fmt(r.removedDate)}.`);
     if (r.removed && ev.type === 'remove') errors.push(`${a.id} is already removed.`);
@@ -842,5 +846,5 @@
     return win;
   }
 
-  S.entry = { addEvents, validate, open, openGiltPool: () => open({ mode: 'gilt' }), describe, historyRows, ltSummaryRows, lifetime, openEventDialog, openEntryDialog, TAB_ORDER };
+  S.entry = { maxDate, addEvents, validate, open, openGiltPool: () => open({ mode: 'gilt' }), describe, historyRows, ltSummaryRows, lifetime, openEventDialog, openEntryDialog, TAB_ORDER };
 })(window.SOS);
