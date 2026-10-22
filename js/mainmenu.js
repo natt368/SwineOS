@@ -19,7 +19,9 @@
     const st = S.store.settings;
     const o = st.owner || {};
     const win = h('section.win.home-win');
-    win.appendChild(h('div.win-title', h('span.win-name', `SwineOS – Herd records  -  [${st.farmNumber} ${st.farmName}]`)));
+    win.appendChild(h('div.win-title',
+      h('button.mm-homebtn', { type: 'button', title: 'Back to the SwineOS home page', onclick: () => S.app.landing() }, h('span', { html: '&#8592;' }), ' SwineOS home'),
+      h('span.win-name', `Herd records  -  [${st.farmNumber} ${st.farmName}]`)));
     const pill = (label, fn, opts = {}) => h('button.pill' + (opts.disabled ? '.disabled' : ''), { type: 'button', disabled: opts.disabled, title: opts.title || label, onclick: fn },
       opts.icon ? h('span.pill-ico', { html: ui().ICONS[opts.icon] || '' }) : null, h('span', label));
     const fem = S.store.animals().filter((a) => a.sex === 'F' && !A(a).removed);

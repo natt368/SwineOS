@@ -756,3 +756,9 @@ button { cursor: pointer; }
   .pill { min-height: 48px; font-size: 15px; padding: 8px 12px; }
   .mm2-head h2 { font-size: 23px; }
 }
+
+/* Main menu: way back to the landing page, top left */
+.mm-homebtn { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; padding: 4px 14px; border-radius: 999px; border: 2px solid #fff;
+  background: #fff; color: var(--royal); font: 700 14px var(--bold); cursor: pointer; line-height: 1.2; }
+.mm-homebtn:hover, .mm-homebtn:focus-visible { background: var(--royal-soft); }
+.mm-homebtn span { font-size: 16px; }
