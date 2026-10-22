@@ -1,6 +1,6 @@
 /* SwineOS – Finances: income and expenses of the barn, in place of the "Expense & Income" and
- * "Barn parts" Excel workbooks. Tabs: Overview, Expenses, Income (hog sales, cripples, cull sows & boars),
- * Year end (the workbook's REPORT and Year End sheets) and Barn parts.
+ * Excel workbook. Tabs: Overview, Expenses, Income (hog sales, cripples, cull sows & boars)
+ * and Year end (the workbook's REPORT and Year End sheets).
  * Records live in S.store (fin) and go into the same backups as the herd. */
 (function (S) {
   'use strict';
@@ -109,7 +109,7 @@
   }
 
   /* ---------- window state ---------- */
-  const view = { tab: 'overview', year: null, stream: 'hogs', exp: { month: '', cat: '', company: '', q: '' }, inc: { month: '', company: '', q: '' }, parts: { q: '' } };
+  const view = { tab: 'overview', year: null, stream: 'hogs', exp: { month: '', cat: '', company: '', q: '' }, inc: { month: '', company: '', q: '' } };
 
   const SVG = {
     plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
@@ -140,22 +140,20 @@
       head.innerHTML = '';
       head.append(
         h('button.fin-home', { type: 'button', title: 'Back to the SwineOS start screen', onclick: () => S.app.landing() }, ico('back'), h('span', 'SwineOS')),
-        h('div.fin-titles', h('h1', 'Finances'), h('p', [S.store.settings.farmName, view.tab === 'parts' ? 'Barn parts and suppliers' : `Income and expenses ${view.year}`].filter(Boolean).join('  ·  '))),
-        view.tab === 'parts' ? h('div.fin-year') : h('div.fin-year', { role: 'group', 'aria-label': 'Year' },
+        h('div.fin-titles', h('h1', 'Finances'), h('p', [S.store.settings.farmName, `Income and expenses ${view.year}`].filter(Boolean).join('  ·  '))),
+        h('div.fin-year', { role: 'group', 'aria-label': 'Year' },
           h('button', { type: 'button', title: 'Previous year', 'aria-label': 'Previous year', disabled: i <= 0, onclick: () => { view.year = ys2[i - 1]; render(); } }, ico('back')),
           h('select', { 'aria-label': 'Year', onchange: (e) => { view.year = +e.target.value; render(); } }, ys2.map((y) => h('option', { value: y, selected: y === view.year ? 'selected' : null }, String(y)))),
           h('button', { type: 'button', title: 'Next year', 'aria-label': 'Next year', disabled: i >= ys2.length - 1, onclick: () => { view.year = ys2[i + 1]; render(); } }, ico('next'))),
         h('div.fin-actions',
-          view.tab === 'parts'
-            ? h('button.fin-btn.solid', { type: 'button', onclick: () => editPart(null, render) }, ico('plus'), 'Barn part')
-            : [h('button.fin-btn.solid', { type: 'button', onclick: () => editExpense(null, render) }, ico('plus'), 'Expense'),
-              h('button.fin-btn.solid', { type: 'button', onclick: () => editIncome(null, render) }, ico('plus'), 'Income')],
+          h('button.fin-btn.solid', { type: 'button', onclick: () => editExpense(null, render) }, ico('plus'), 'Expense'),
+          h('button.fin-btn.solid', { type: 'button', onclick: () => editIncome(null, render) }, ico('plus'), 'Income'),
           h('button.fin-btn', { type: 'button', onclick: () => importDialog(render) }, ico('upload'), 'Import Excel'),
           h('button.fin-btn.icon', { type: 'button', title: 'Print', 'aria-label': 'Print', onclick: () => printTab() }, ico('print')),
           h('button.fin-btn.icon', { type: 'button', title: 'Export to Excel (CSV)', 'aria-label': 'Export to Excel (CSV)', onclick: () => exportTab() }, ico('download')),
           h('button.fin-btn.icon', { type: 'button', title: 'Finance settings', 'aria-label': 'Finance settings', onclick: () => settingsDialog(render) }, ico('gear'))));
       tabs.innerHTML = '';
-      [['overview', 'Overview'], ['exp', 'Expenses'], ['inc', 'Income'], ['year', 'Year end'], ['parts', 'Barn parts']].forEach(([k, label]) => {
+      [['overview', 'Overview'], ['exp', 'Expenses'], ['inc', 'Income'], ['year', 'Year end']].forEach(([k, label]) => {
         tabs.appendChild(h('button.fin-tab' + (view.tab === k ? '.on' : ''), { type: 'button', role: 'tab', 'aria-selected': view.tab === k ? 'true' : 'false', onclick: () => { view.tab = k; render(); main.scrollTop = 0; } }, label));
       });
       main.innerHTML = '';
@@ -651,75 +649,6 @@
     return wrap;
   }
 
-  /* ---------- Barn parts (Barn parts workbook) ---------- */
-  function partsView(render) {
-    const all = S.store.fin().filter((r) => r.kind === 'part');
-    const f = view.parts;
-    const wrap = h('div.fin-page');
-    const filters = filterBar(f, { placeholder: 'Part, number, company, contact or what it is for' }, (typing) => { if (typing) update(); else render(); });
-    const stats = h('div.fin-stats');
-    const columns = [
-      { label: 'Date', value: (r) => r.date, render: (r) => U.fmt(r.date) },
-      { label: 'Part', value: (r) => r.item },
-      { label: 'Order code', value: (r) => r.orderCode || '' },
-      { label: 'Part number', value: (r) => r.partNo || '' },
-      { label: 'Company', value: (r) => r.company || '' },
-      { label: 'Phone', value: (r) => r.phone || '', render: (r) => ((r.phone || '').replace(/\D/g, '').length >= 7 ? h('a.fin-tel', { href: 'tel:' + r.phone.replace(/[^\d+]/g, ''), onclick: (e) => e.stopPropagation() }, ico('phone'), r.phone) : '') },
-      { label: 'Talk to', value: (r) => r.contact || '' },
-      { label: 'Quantity', value: (r) => r.qty || '' },
-      { label: '$ / unit', num: true, value: (r) => r.unitCost ?? '', render: (r) => (r.unitCost ? money(r.unitCost) : '') },
-      { label: 'For / notes', value: (r) => [r.forWhat, r.notes].filter(Boolean).join(' · ') },
-    ];
-    const grid = ui().grid({ columns, rows: [], cls: 'fin-grid.fin-parts', rowKey: (r) => r.id, emptyText: all.length ? 'No parts match.' : 'No barn parts yet. Import the Barn parts workbook or add a part.', onRowClick: (r) => editPart(r, render) });
-    function rows() {
-      const q = f.q.trim().toLowerCase();
-      return all.filter((r) => !q || [r.item, r.orderCode, r.partNo, r.company, r.phone, r.contact, r.qty, r.forWhat, r.notes].some((x) => String(x || '').toLowerCase().includes(q)))
-        .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-    }
-    function update() { const list = rows(); grid.update(list); stats.innerHTML = ''; stats.append(h('span', h('b', n(list.length)), list.length === 1 ? ' part' : ' parts'), h('span', h('b', n(distinct(list.map((r) => r.company)).length)), ' suppliers')); }
-    update();
-    wrap.append(h('section.fin-card.fin-list-card', filters, stats, grid));
-    wrap.printNode = () => tableOf(columns, rows());
-    wrap.printTitle = 'Barn parts';
-    wrap.fileName = 'barn-parts';
-    wrap.csv = () => U.csv([columns.map((c) => c.label), ...rows().map((r) => columns.map((c) => c.value(r)))]);
-    return wrap;
-  }
-  function editPart(rec, render) {
-    const isNew = !rec;
-    const r = rec || { kind: 'part', date: U.today(), item: '' };
-    const past = S.store.fin().filter((x) => x.kind === 'part');
-    const F = {};
-    const inp = (k, attrs) => (F[k] = ui().input('fp-' + k, r[k] ?? '', { autocomplete: 'off', ...attrs }));
-    const date = ui().dateInput('fp-date', r.date);
-    const company = inp('company', { list: 'fp-companies' });
-    // a supplier used before fills in the phone number and who to talk to
-    company.addEventListener('change', () => {
-      const prev = past.find((x) => (x.company || '').toLowerCase() === company.value.trim().toLowerCase());
-      if (prev) { if (!F.phone.value) F.phone.value = prev.phone || ''; if (!F.contact.value) F.contact.value = prev.contact || ''; }
-    });
-    const form = h('div.form.fin-form',
-      ui().field('Date', date), ui().field('Part', inp('item', { placeholder: 'e.g. Gear box for 25000 bushel bin' })),
-      h('div.fin-row2', ui().field('Order code', inp('orderCode')), ui().field('Part number', inp('partNo'))),
-      ui().field('Company', company), h('div.fin-row2', ui().field('Phone', inp('phone', { type: 'tel' })), ui().field('Talk to', inp('contact'))),
-      h('div.fin-row2', ui().field('Quantity', inp('qty')), ui().field('$ / unit', moneyInput('fp-unitCost', r.unitCost))),
-      ui().field('For', inp('forWhat', { placeholder: 'Where it goes, when it was changed' })), ui().field('Notes', inp('notes')),
-      datalist('fp-companies', past.map((x) => x.company)));
-    F.unitCost = form.querySelector('#fp-unitCost');
-    async function save(again) {
-      if (!F.item.value.trim()) { ui().toast('Type the part.', 'error'); F.item.focus(); return true; }
-      const out = { ...r, kind: 'part', date: date.value || U.today() };
-      for (const k of ['item', 'orderCode', 'partNo', 'company', 'phone', 'contact', 'qty', 'forWhat', 'notes']) { const v = F[k].value.trim(); if (v) out[k] = v; else delete out[k]; }
-      const uc = num(F.unitCost.value); if (uc !== null) out.unitCost = uc; else delete out.unitCost;
-      await S.store.saveFin(out);
-      render();
-      ui().toast(`${isNew ? 'Added' : 'Saved'} ${out.item}.`, 'ok');
-      if (again) setTimeout(() => editPart(null, render), 0);
-      return false;
-    }
-    ui().modal({ title: isNew ? 'New barn part' : 'Barn part', width: 620, cls: 'fin-dlg', body: form, buttons: dialogFoot(isNew, save, isNew ? null : () => remove(r, r.item, render)) });
-  }
-
   /* ---------- Finance settings ---------- */
   function settingsDialog(render) {
     const fs = finSettings();
@@ -763,7 +692,7 @@
     const status = h('div.fin-import-status');
     const pick = h('label.fin-drop',
       h('input', { type: 'file', accept: '.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', onchange: (e) => read(e.target.files[0]) }),
-      ico('upload'), h('b', 'Choose an Excel file'), h('span', 'The Expense & Income workbook or the Barn parts workbook (.xls or .xlsx)'));
+      ico('upload'), h('b', 'Choose an Excel file'), h('span', 'The Expense & Income workbook (.xls or .xlsx)'));
     const m = ui().modal({ title: 'Import Excel workbook', width: 600, cls: 'fin-dlg', body: h('div', pick, status), buttons: [{ label: 'Close' }] });
     async function read(file) {
       if (!file) return;
@@ -773,21 +702,20 @@
         const wb = await S.xls.readWorkbook(await file.arrayBuffer(), S.pigwin && S.pigwin.unzip);
         res = S.finImport.convert(wb, view.year);
       } catch (e) { status.innerHTML = ''; status.append(h('p.fin-err', e.message || String(e))); return; }
-      if (!res.records.length) { status.innerHTML = ''; status.append(h('p.fin-err', 'No expenses, income or barn parts were found in this workbook. It needs sheets named EXPENSE, HOGS SALES, CRIPPLES, CULL SOW & BOARS or SHOP SUPPLIES with a MONTH column.')); return; }
+      if (!res.records.length) { status.innerHTML = ''; status.append(h('p.fin-err', 'No expenses or income were found in this workbook. It needs sheets named EXPENSE, HOGS SALES, CRIPPLES or CULL SOW & BOARS with a MONTH column.')); return; }
       const groups = [
         ['Expenses', res.records.filter((r) => r.kind === 'exp')],
         ...Object.entries(STREAMS).map(([k, x]) => [x.label, res.records.filter((r) => r.stream === k)]),
-        ['Barn parts', res.records.filter((r) => r.kind === 'part')],
       ].filter(([, l]) => l.length);
-      // records already here that this import stands in for: the same year's expenses / income streams, and imported barn parts
+      // records already here that this import stands in for: the same year's expenses / income streams
       const kinds = new Set(res.records.map((r) => r.kind + (r.stream || '')));
-      const replaced = S.store.fin().filter((r) => kinds.has(r.kind + (r.stream || '')) && (r.kind === 'part' ? r.id.startsWith('x') : r.date.startsWith(String(res.year))));
+      const replaced = S.store.fin().filter((r) => kinds.has(r.kind + (r.stream || '')) && r.date.startsWith(String(res.year)));
       const replace = h('input', { type: 'checkbox', checked: true });
       status.innerHTML = '';
       status.append(
-        h('p', h('b', file.name), res.records.some((r) => r.kind !== 'part') ? `  ·  ${res.year}` : '', res.farm ? `  ·  ${res.farm}` : '', res.sows ? `  ·  ${n(res.sows)} sows` : ''),
+        h('p', h('b', file.name), `  ·  ${res.year}`, res.farm ? `  ·  ${res.farm}` : '', res.sows ? `  ·  ${n(res.sows)} sows` : ''),
         h('table.fin-table', h('tbody', groups.map(([label, l]) => h('tr', h('td', label), h('td.num', `${n(l.length)} ${l.length === 1 ? 'record' : 'records'}`),
-          h('td.num', l[0].kind === 'part' ? '' : money(U.sum(l.map((r) => r.total)))), h('td.num', l[0].kind === 'inc' ? `${n(U.sum(l.map((r) => r.head)))} head` : ''))))),
+          h('td.num', money(U.sum(l.map((r) => r.total)))), h('td.num', l[0].kind === 'inc' ? `${n(U.sum(l.map((r) => r.head)))} head` : ''))))),
         replaced.length ? h('label.fin-check', replace, ` Replace the ${n(replaced.length)} matching records already in SwineOS (recommended when importing an updated copy of the same workbook)`) : null,
         h('div.fin-import-go', h('button.fin-btn.solid', { type: 'button', onclick: go }, ico('upload'), `Import ${n(res.records.length)} records`)));
       async function go(e) {
@@ -802,11 +730,11 @@
         usedCodes.forEach((c) => extra.push({ code: c, name: `Type ${c}`, feed: false }));
         const patch = {};
         if (extra.length) patch.cats = [...fs.cats, ...extra];
-        if (res.sows && res.records.some((r) => r.kind !== 'part') && !fs.sows[res.year]) patch.sows = { ...fs.sows, [res.year]: res.sows };
+        if (res.sows && !fs.sows[res.year]) patch.sows = { ...fs.sows, [res.year]: res.sows };
         if (Object.keys(patch).length) await saveFinSettings(patch);
         if (res.farm && (!S.store.settings.farmName || S.store.settings.farmName === S.DEFAULT_SETTINGS.farmName)) await S.store.saveSettings({ ...S.store.settings, farmName: res.farm });
         S.store.log(`Imported finance workbook ${file.name}: ${res.records.length} records`);
-        if (res.records.some((r) => r.kind !== 'part')) { view.year = res.year; if (view.tab === 'parts') view.tab = 'overview'; } else view.tab = 'parts';
+        view.year = res.year;
         m.close();
         render();
         ui().toast(`Imported ${n(res.records.length)} records from ${file.name}.`, 'ok');
@@ -814,7 +742,7 @@
     }
   }
 
-  const VIEWS = { overview: overviewView, exp: expensesView, inc: incomeView, year: yearEndView, parts: partsView };
+  const VIEWS = { overview: overviewView, exp: expensesView, inc: incomeView, year: yearEndView };
 
-  S.finance = { open, summarize };
+  S.finance = { open, summarize, importDialog: (done) => importDialog(done || (() => {})) };
 })(window.SOS);

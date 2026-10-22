@@ -18,7 +18,7 @@
     entryDateSticky: true,
     mount(win, rerender, rebuild) {
       root.innerHTML = '';
-      if (S.store.settings.demo) root.appendChild(h('div.demo-banner', 'EXAMPLE DATA – this herd was generated for trying the program. Clear it under Settings → Backup & data before entering your own animals.'));
+      if (S.store.settings.demo) root.appendChild(h('div.demo-banner', 'EXAMPLE DATA – this herd was generated for trying the program. Clear it under Data management (gear on the SwineOS home page) before entering your own animals.'));
       root.appendChild(win);
       S.safety.attach(win);
       app.current = win;
@@ -34,6 +34,8 @@
     landing() { app.mount(S.landing.landing(), () => app.landing()); },
     /** Herd records main menu (data entry and reports). */
     home() { app.mount(S.mainMenu.home(), () => app.home()); },
+    /** Backups, Google Drive and imports for herd records and finances (gear on the landing page). */
+    dataMgmt() { app.mount(S.dataMgmt.open(), null, () => app.dataMgmt()); },
     finances() { app.mount(S.finance.open(), null, () => app.finances()); },
     reports(section = 'sows') { app.mount(S.reports.menu(section), () => app.reports(section)); },
     entry(list) { const w = S.entry.open(list ? { list } : {}); app.mount(w, null, () => app.entry(list)); },
@@ -54,9 +56,9 @@
       ['Getting started', 'Use Sow data entry to record events in the barn: matings, pregnancy checks, farrowings, piglet deaths, fostering and weaning. Reports and Action lists are calculated from those records.'],
       ['Entering a new animal', 'In Sows / Boars (or Gilt pool for gilts), click the Entry tab at the bottom, type the new ID and press Enter. Fill in the Herd entry details: arrival and herd entry dates, origin, genetics and so on.'],
       ['Action list entry', 'Enter results for a whole list of sows at once: pick the tab (Farrowing, Weaning, Mating …), type the numbers in the rows and press Enter on the toolbar.'],
-      ['Google Drive backup', 'Settings → Google Drive: connect your Google account and choose a folder. SwineOS then backs up a minute after every change, keeps a copy for each day, and loads the newest backup when it opens, so several computers can work on the same herd.'],
+      ['Google Drive backup', 'Data management (the gear on the SwineOS home page): connect your Google account and choose a folder. SwineOS then backs up a minute after every change, keeps a copy for each day, and loads the newest backup when it opens, so several computers can work on the same herd.'],
       ['Moving from PigWIN', 'Open More options → Import PigWIN backup and choose your .BDR backup file. All sows, boars and their history are loaded.'],
-      ['Backups', S.store && S.store.state.backend === 'cloud' ? 'Records are kept in the shared online database. You can still download a backup file under Settings → Backup & data.' : 'Records are kept in this web browser. Download a backup file regularly under Settings → Backup & data, and restore it on another computer if needed.'],
+      ['Backups', S.store && S.store.state.backend === 'cloud' ? 'Records are kept in the shared online database. You can still download a backup file under Data management (gear on the SwineOS home page).' : 'Records are kept in this web browser. Download a backup file regularly under Data management (gear on the SwineOS home page), and restore it on another computer if needed.'],
     ],
     entry: [
       ['Recording an event', '1. Click the event tab at the bottom (Mate, Farrow, Wean …). It turns red.\n2. Type the sow ID in the green box and press Enter.\n3. Fill in the form and press Enter or Save.\nThe list at the top (Current tab) shows the sows that can have that event, e.g. lactating sows for Wean.'],

@@ -15,7 +15,7 @@
   /** The first screen: pig, name and the two parts of SwineOS. */
   function landing() {
     const win = h('section.win.landing-win');
-    win.appendChild(h('div.win-title.ld-title', h('span.win-name', farmLine() ? `SwineOS  -  [${farmLine()}]` : 'SwineOS')));
+    win.appendChild(h('div.win-title.ld-title', h('span.win-name', farmLine() ? `SwineOS  -  [${farmLine()}]` : 'SwineOS'), S.dataMgmt.gear()));
     const btn = (icon, label, sub, fn) => h('button.ld-btn', { type: 'button', onclick: fn },
       h('span.ld-ico', { html: icon }), h('span.ld-txt', h('b', label), h('small', sub)));
     win.appendChild(h('main.ld-main',
@@ -24,7 +24,7 @@
       h('p.ld-tag', 'Sow herd records and farm finances'),
       h('div.ld-btns',
         btn(ICON_HERD, 'Herd records', 'Matings, farrowings, weaning, sow cards and reports', () => S.app.home()),
-        btn(ICON_MONEY, 'Finances', 'Income, expenses, year end and barn parts', () => S.app.finances()))));
+        btn(ICON_MONEY, 'Finances', 'Income, expenses and year end', () => S.app.finances()))));
     win.appendChild(h('footer.ld-foot', farmLine()));
     return win;
   }

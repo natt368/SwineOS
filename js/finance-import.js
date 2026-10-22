@@ -1,6 +1,6 @@
 /* SwineOS – turn the barn's Excel workbooks into finance records.
  * Reads the "Expense & Income" workbook (sheets EXPENSE, HOGS SALES, CRIPPLES, CULL SOW & BOARS,
- * INFORMATION.SHEET, REPORT) and the "Barn parts" workbook (sheet SHOP SUPPLIES).
+ * INFORMATION.SHEET, REPORT).
  * Columns are found by their header text, so added or moved columns do not break the import.
  * Works in browsers and Node 18+. */
 (function (root) {
@@ -131,36 +131,12 @@
     return out;
   }
 
-  function parts(wb, year) {
-    const s = sheet(wb, 'SHOP SUPPLIES', 'BARN PARTS', 'PARTS');
-    if (!s) return [];
-    const hd = header(s.rows); if (!hd) return [];
-    const C = { m: hd.cols.MONTH, d: col(hd, /^DATE$/), y: col(hd, /^YEAR$/), item: col(hd, /^ITEM/), order: col(hd, /^ORDER/), part: col(hd, /^PART/), comp: col(hd, /^COMP/),
-      phone: col(hd, /^PHONE/), contact: col(hd, /^TALK/, /^CONTACT/), qty: col(hd, /^QU/), unitCost: col(hd, /^\$UNIT/), for: col(hd, /^FOR/) };
-    const last = Math.max(...Object.values(hd.cols));
-    const out = [];
-    for (let r = hd.row + 1; r < s.rows.length; r++) {
-      const row = s.rows[r]; if (!row) continue;
-      const item = str(at(row, C.item)); const m = month(at(row, C.m));
-      if (!item) continue;
-      const y = num(at(row, C.y)) || year;
-      const notes = row.slice(last + 1).map(str).filter(Boolean).join(' · ');
-      const rec = { id: `x${y}p${r + 1}`, kind: 'part', date: m ? isoDate(y, m, at(row, C.d)) : `${y}-01-01`, item, orderCode: str(at(row, C.order)), partNo: str(at(row, C.part)),
-        company: str(at(row, C.comp)), phone: str(at(row, C.phone)), contact: str(at(row, C.contact)), qty: str(at(row, C.qty)), forWhat: str(at(row, C.for)) };
-      const uc = num(at(row, C.unitCost)); if (uc) rec.unitCost = round(uc);
-      else if (uc === null && str(at(row, C.unitCost))) rec.qty = [rec.qty, str(at(row, C.unitCost))].filter(Boolean).join(' · ');
-      if (notes) rec.notes = notes;
-      out.push(rec);
-    }
-    return out;
-  }
-
   /** Workbook ({ sheets }) -> { year, farm, sows, codes, records } */
   function convert(wb, fallbackYear) {
     const info = farmInfo(wb);
     const exp = sheet(wb, 'EXPENSE');
     const year = info.year || (exp && titleYear(exp)) || fallbackYear || new Date().getFullYear();
-    const records = [...expenses(wb, year), ...income(wb, year), ...parts(wb, year)];
+    const records = [...expenses(wb, year), ...income(wb, year)];
     return { year, farm: info.farm || '', sows: info.sows || 0, codes: reportCodes(wb), records };
   }
 

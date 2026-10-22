@@ -309,7 +309,7 @@
   }
   /** Sign in, find the folder that holds the SwineOS backup and load it. Used on a new computer. */
   async function connectAndLoad() {
-    if (!CONN && !clientId()) { S.settingsUI.open('drive'); ui().toast('Paste the Google Client ID first (Settings → Google Drive).'); return; }
+    if (!CONN && !clientId()) { S.settingsUI.open('drive'); ui().toast('Paste the Google Client ID first (Data management (gear on the SwineOS home page)).'); return; }
     await connect();
     if (cfg.folderId) { setStatus('loading'); await sync(true); return; }
     const found = await findBackupFolders();
@@ -363,7 +363,7 @@
   let paneRender = null; // redraws the open Google Drive settings pane
   const farmLabel = () => (`${S.store.settings.farmNumber || ''} ${S.store.settings.farmName || ''}`.trim() || 'herd').replace(/[\\/:*?"<>|]/g, '-').slice(0, 80);
   async function backupNow(interactive = false) {
-    if (!configured()) { if (interactive) throw new Error('Choose a Google Drive folder first (Settings → Google Drive).'); return; }
+    if (!configured()) { if (interactive) throw new Error('Choose a Google Drive folder first (Data management (gear on the SwineOS home page)).'); return; }
     if (busy) { if (interactive) throw new Error('A backup is already running. Try again in a moment.'); return; }
     if (!CONN && S.store.state.backend === 'cloud') return;
     if (!navigator.onLine) {

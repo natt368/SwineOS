@@ -54,7 +54,7 @@
       if (ds === 'error') return { st: 'warn', label: 'Backup failed', detail: 'The last Google Drive backup failed: ' + (d.status.msg || 'unknown error') + `. Changes are saved in ${where}; SwineOS tries again after the next change.` };
       return { st: 'saving', label: 'Connecting…', detail: 'Connecting to Google Drive.' };
     }
-    if (cloud) return { st: 'safe', label: 'Saved online', detail: 'Every change is saved to the shared online database' + (ss.lastSaved ? ` (last save ${ago(ss.lastSaved)})` : '') + '. It is not backed up to Google Drive yet: set that up under Settings → Google Drive.' };
+    if (cloud) return { st: 'safe', label: 'Saved online', detail: 'Every change is saved to the shared online database' + (ss.lastSaved ? ` (last save ${ago(ss.lastSaved)})` : '') + '. It is not backed up to Google Drive yet: set that up under Data management (gear on the SwineOS home page).' };
     const dl = lastDownload();
     return { st: 'warn', label: 'This computer only', detail: 'Records are saved in this browser on this computer, but not backed up anywhere else' + (dl ? ` (last backup file downloaded ${ago(dl)})` : '') + '. Connect Google Drive for automatic backups, or download a backup file regularly.' };
   }
@@ -96,7 +96,7 @@
   function attach(win) {
     const bar = win && win.querySelector('.win-title');
     if (!bar) return;
-    const x = bar.querySelector('.win-x');
+    const x = bar.querySelector('.win-end, .win-x');
     bar.insertBefore(badge, x || null);
     render();
   }

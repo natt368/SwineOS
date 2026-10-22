@@ -15,8 +15,10 @@
   ];
 
   function open(section = 'farm') {
+    // backups, Google Drive and imports live on the Data management page (gear on the landing page)
+    if (section === 'data' || section === 'drive') { U.$$('.modal-back').forEach((m) => m.remove()); S.app.dataMgmt(); return; }
     const s = JSON.parse(JSON.stringify(S.store.settings));
-    const tabsDef = [['farm', 'Farm'], ['codes', 'Code lists'], ['vacc', 'Vaccinations'], ['targets', 'Targets'], ['actions', 'Action lists'], ['data', 'Backup & data'], ['drive', 'Google Drive']];
+    const tabsDef = [['farm', 'Farm'], ['codes', 'Code lists'], ['vacc', 'Vaccinations'], ['targets', 'Targets'], ['actions', 'Action lists']];
     if (section === 'entry' || section === 'report') section = 'farm';
     const body = h('div.settings');
     const tabBar = h('div.set-tabs');
@@ -42,7 +44,7 @@
         ui().field('Gilt age for service list (days)', num(s, 'giltEntryAge', { min: 120, max: 400 })),
         ui().field('Matings up to … days after the first mating are one service', num(s, 'serviceWindowDays', { min: 1, max: 10 }), 'PigWIN uses 6: a mating 7 or more days after the first one is a repeat service.'),
         ui().field('A repeat service at least … days later', num(s, 'minRepeatServiceDays', { min: 7, max: 30 }), 'A new mating sooner than this after another mating is refused as a duplicate (default 17).'),
-        h('p.hint', `Data is stored ${S.store.state.backend === 'cloud' ? 'in the shared online database – everyone with access to this app sees the same herd.' : 'in this web browser on this computer. Download a backup regularly (Backup & data).'}`)),
+        h('p.hint', `Data is stored ${S.store.state.backend === 'cloud' ? 'in the shared online database – everyone with access to this app sees the same herd.' : 'in this web browser on this computer. Download a backup regularly (Data management, the gear on the SwineOS home page).'}`)),
       codes: () => h('div.codes-edit', LIST_NAMES.map(([k, label]) => h('label.code-list', h('span.flabel', label),
         h('textarea', { rows: 6, onchange: (e) => { s.lists[k] = e.target.value.split('\n').map((x) => x.trim()).filter((x, i) => x || (k === 'technicians' && i === 0)); } }, (s.lists[k] || []).join('\n')))), h('p.hint', 'One entry per line.')),
       vacc: () => {
@@ -67,26 +69,6 @@
       actions: () => h('div.form', h('p.hint', 'Default selections for the Action lists dialog.'),
         ...[['giltAge', 'Gilts from (days of age)'], ['openDays', 'Open sows from (days open)'], ['servicesLast', 'No. of services last (days)'], ['heat3', 'Heat check at 3 weeks from (days gestation)'], ['heat6', 'Heat check at 6 weeks from (days gestation)'], ['preg1', 'Pregnancy check on (days)'], ['preg2', 'Pregnancy check 2 on (days)'], ['served', 'Sows served (days)'], ['dueFarrow', 'Sows due to farrow next (days)'], ['weanLitters', 'Sows to be weaned, litters from (days)']]
           .map(([k, l]) => ui().field(l, num(s.actionLists, k, { min: 0 })))),
-      drive: () => S.drive.pane(),
-      data: () => {
-        const st = S.store.state;
-        const females = S.store.animals().filter((a) => a.sex === 'F').length;
-        const prog = h('div.progress');
-        return h('div.data-pane',
-          h('p', `${S.store.animals().length} animals on file (${females} females). Storage: ${st.backend === 'cloud' ? 'shared online database' : 'this browser'}.`),
-          s.demo ? h('p.demo-note', 'The herd on file is EXAMPLE data. Clear it before entering your own animals.') : null,
-          h('div.btn-col',
-            h('button.wbtn', { type: 'button', onclick: () => ui().saveFile(`swineos-backup-${U.today()}.json`, S.store.exportJSON(), 'application/json') }, 'Download backup file to this computer'),
-            h('button.wbtn', { type: 'button', onclick: () => show('drive') }, S.drive.configured() ? 'Google Drive backup: ' + (S.drive.config.folderName || '') : 'Connect Google Drive for automatic backups…'),
-            h('label.wbtn.file.big', 'Import PigWIN backup (.BDR)…', h('input', { type: 'file', accept: '.bdr,.BDR,.zip', onchange: (e) => importPigwin(e.target.files[0], prog) })),
-            h('label.wbtn.file', 'Restore backup…', h('input', { type: 'file', accept: '.json,.gz,application/json,application/gzip,.bdr,.BDR', onchange: (e) => restore(e.target.files[0], prog) })),
-            h('label.wbtn.file', 'Import animals from CSV…', h('input', { type: 'file', accept: '.csv,text/csv', onchange: (e) => importCsv(e.target.files[0], prog) })),
-            h('button.wbtn', { type: 'button', onclick: () => loadDemo(prog) }, 'Load example herd'),
-            h('button.wbtn.danger', { type: 'button', onclick: () => clearAll(prog) }, 'Clear all records')),
-          prog,
-          h('p.hint', 'Moving from PigWIN or PigLITTER: make a farm backup there (PigMAIN → Backup farm data) and import the .BDR file here. All sows, boars and their history are loaded.'),
-          h('p.hint', 'CSV import columns: ID, Sex (F/M), Birth date, Arrival date, Entry date, Parity, Breed, Location. Dates as YYYY-MM-DD or M/D/YYYY.'));
-      },
     };
     show(cur);
     ui().modal({ title: 'Settings', body, width: 760, cls: 'set-modal', buttons: [
@@ -199,5 +181,5 @@
     S.app.home();
   }
 
-  S.settingsUI = { open, loadDemo, restore, importPigwin };
+  S.settingsUI = { open, loadDemo, restore, importPigwin, importCsv, clearAll };
 })(window.SOS);

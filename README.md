@@ -6,7 +6,7 @@ It is a plain web app (HTML, CSS and JavaScript, no build step and no server). O
 
 ## Moving from PigWIN / PigLITTER
 
-Make a farm backup in PigWIN (PigMAIN → Backup farm data). It is saved as a `.BDR` file named after the farm, for example `01042301Veteran Colony (AB)[2020_2_3][10_18_26].BDR`. In SwineOS open **More options → Import PigWIN backup** (or Settings → Backup & data) and choose that file.
+Make a farm backup in PigWIN (PigMAIN → Backup farm data). It is saved as a `.BDR` file named after the farm, for example `01042301Veteran Colony (AB)[2020_2_3][10_18_26].BDR`. In SwineOS open **More options → Import PigWIN backup** (or Data management (gear on the SwineOS home page)) and choose that file.
 
 The backup is read in the browser. Nothing is uploaded anywhere. These records are converted:
 
@@ -69,7 +69,7 @@ Piglets lost between farrowing and weaning that were never entered as deaths are
 
 ## Where the data is kept
 
-- **Hosted on GitHub Pages or opened as a file:** records are stored in that browser on that computer (IndexedDB). Use *Settings → Backup & data → Download backup* regularly; the backup file can be restored on another computer.
+- **Hosted on GitHub Pages or opened as a file:** records are stored in that browser on that computer (IndexedDB). Use *Data management (gear on the SwineOS home page) → Download backup file* regularly; the backup file can be restored on another computer.
 - **Opened as a claude.ai Artifact:** records are stored in the Artifact's shared online database, so every computer or phone that opens the link sees the same herd.
 
 ## Is my data safe?
@@ -94,18 +94,18 @@ The claude.ai version needs internet, because its records live in the online dat
 
 ## Google Drive backup
 
-On the website version (GitHub Pages), **Settings → Google Drive** connects a Google account and a Drive folder:
+On the website version (GitHub Pages), **Data management (gear on the SwineOS home page)** connects a Google account and a Drive folder:
 
 - One minute after every change, the herd is backed up to `SwineOS backup - <farm>.json.gz` in that folder (gzip-compressed, about 10 % of the JSON size), plus a dated copy for each day (the last 14 are kept; adjustable in *Daily copies to keep*). The daily copies are a safety net: if records are entered wrongly or deleted, you can go back to how they were on an earlier day with *Restore from Google Drive*.
-- The connected folder (full path and Google account) is shown on the main menu, in the title-bar badge and in Settings → Google Drive.
-- On a new computer, press **Load from Google Drive** on the welcome screen (or Connect in Settings → Google Drive): SwineOS signs in, finds the folder that holds the SwineOS backup by itself and loads the herd. After that it remembers the folder.
+- The connected folder (full path and Google account) is shown on the main menu, in the title-bar badge and in Data management (gear on the SwineOS home page).
+- On a new computer, press **Load from Google Drive** on the welcome screen (or Connect in Data management (gear on the SwineOS home page)): SwineOS signs in, finds the folder that holds the SwineOS backup by itself and loads the herd. After that it remembers the folder.
 - When SwineOS opens, it loads the newest backup from the folder. Google's sign-in lasts one hour; after that the browser only lets Google renew it from a click, so if it is blocked on opening, the first click or key press anywhere renews it and loads the backup (no extra dialog). Allowing pop-ups for the site makes this happen without the click. Every 10 minutes, and when you come back to the tab, it checks for backups made on another computer. 
 - **Two computers (e.g. barn and office) never overwrite each other.** Before every upload SwineOS checks whether the backup in Drive changed since this computer last synced (or was never synced with it). If so it first combines that backup with the records here: animals and events from both computers are kept, for the same event the latest edit wins, and events or animals deleted on either computer stay deleted (deletions are remembered with a time). It checks again after uploading in case the other computer backed up at the same moment. An empty or out-of-date computer therefore loads the herd instead of replacing it. Replacing the whole herd on purpose (PigWIN import, restoring a backup, example herd, clear all) is taken over by the other computers as it is. PigWIN imports give every event PigWIN's own event number, so events from different backups are matched correctly.
 - The badge in every window's title bar shows when the last backup was made.
 
-One-time set-up: Google requires an OAuth Client ID for the site. In console.cloud.google.com create a project, enable the **Google Drive API**, set up the **OAuth consent screen** (External, add your Google address as a test user), then create an **OAuth client ID → Web application** with `https://natt368.github.io` as an authorized JavaScript origin. Paste the Client ID in Settings → Google Drive, or put it in `js/config.js` so every computer has it. Google shows an "unverified app" warning the first time: choose Continue.
+One-time set-up: Google requires an OAuth Client ID for the site. In console.cloud.google.com create a project, enable the **Google Drive API**, set up the **OAuth consent screen** (External, add your Google address as a test user), then create an **OAuth client ID → Web application** with `https://natt368.github.io` as an authorized JavaScript origin. Paste the Client ID in Data management (gear on the SwineOS home page), or put it in `js/config.js` so every computer has it. Google shows an "unverified app" warning the first time: choose Continue.
 
-**claude.ai version:** records are kept in the shared online database, and Settings → Google Drive backs them up through the **Google Drive connector of your Claude account** (claude.ai Settings → Connectors): no Client ID or Google Cloud set-up. Press *Connect Google Drive*, allow SwineOS to use Google Drive when claude.ai asks, and choose a folder. Each backup is a new file `SwineOS backup - <farm> - <date> <time>.json.gz` (split into `(1 of 2)`, `(2 of 2)` … parts when the herd is over 700 KB compressed, because one connector call carries at most 1 MB). The newest backup is kept, plus the last one of each earlier day for *Daily copies to keep* days; older ones go to the Drive trash. If the claude.ai version opens with no animals, it loads the newest backup from the folder. *Back up now* shows the file name with a link to it in Drive.
+**claude.ai version:** records are kept in the shared online database, and Data management (gear on the SwineOS home page) backs them up through the **Google Drive connector of your Claude account** (claude.ai Settings → Connectors): no Client ID or Google Cloud set-up. Press *Connect Google Drive*, allow SwineOS to use Google Drive when claude.ai asks, and choose a folder. Each backup is a new file `SwineOS backup - <farm> - <date> <time>.json.gz` (split into `(1 of 2)`, `(2 of 2)` … parts when the herd is over 700 KB compressed, because one connector call carries at most 1 MB). The newest backup is kept, plus the last one of each earlier day for *Daily copies to keep* days; older ones go to the Drive trash. If the claude.ai version opens with no animals, it loads the newest backup from the folder. *Back up now* shows the file name with a link to it in Drive.
 
 ## Hosting on GitHub Pages
 
