@@ -149,8 +149,7 @@
         h('div.fin-actions',
           h('button.fin-btn.solid', { type: 'button', onclick: () => editExpense(null, render) }, ico('plus'), 'Expense'),
           h('button.fin-btn.solid', { type: 'button', onclick: () => editIncome(null, render) }, ico('plus'), 'Income'),
-          h('button.fin-btn', { type: 'button', onclick: () => importDialog(render) }, ico('upload'), 'Import Excel'),
-          h('button.fin-btn.icon', { type: 'button', title: 'Print', 'aria-label': 'Print', onclick: () => printTab() }, ico('print')),
+          h('button.fin-btn.icon', { type: 'button', title: 'Print the finance report (or save it as a PDF)', 'aria-label': 'Print the finance report', onclick: () => printReport(view.year, view.tab, current) }, ico('print')),
           h('button.fin-btn.icon', { type: 'button', title: 'Export to Excel (CSV)', 'aria-label': 'Export to Excel (CSV)', onclick: () => exportTab() }, ico('download')),
           h('button.fin-btn.icon', { type: 'button', title: 'Finance settings', 'aria-label': 'Finance settings', onclick: () => settingsDialog(render) }, ico('gear'))));
       tabs.innerHTML = '';
@@ -163,11 +162,6 @@
     }
     // what Print and Export act on: the open tab
     let current = null;
-    function printTab() {
-      const node = current && current.printNode ? current.printNode() : null;
-      if (!node) { ui().toast('Nothing to print on this tab.'); return; }
-      ui().printPreview(current.printTitle, node);
-    }
     function exportTab() {
       const csv = current && current.csv ? current.csv() : null;
       if (!csv) { ui().toast('Nothing to export on this tab.'); return; }
@@ -213,14 +207,14 @@
 
     // monthly chart
     const chart = h('section.fin-card.fin-chart-card',
-      h('div.fin-card-head', h('h2', 'Income and expenses by month'),
+      h('div.fin-card-head', h('h2', 'Income and Expenses by month'),
         h('div.fin-legend', h('span', h('i', { style: { background: INCOME } }), 'Income'), h('span', h('i', { style: { background: EXPENSE } }), 'Expenses'))),
       monthChart(s.months));
     const catCard = h('section.fin-card',
-      h('div.fin-card-head', h('h2', 'Where the money went'), h('span.fin-muted', `${money(s.expense, 0)} in ${s.nExp} bills`)),
+      h('div.fin-card-head', h('h2', 'Expense'), h('span.fin-muted', `${money(s.expense, 0)} in ${s.nExp} bills`)),
       barList(s.byCat.map((c) => ({ label: c.name, value: c.total, tag: c.feed ? 'feed' : '', onClick: () => { view.tab = 'exp'; view.exp = { month: '', cat: String(c.code), company: '', q: '' }; render(); } })), s.expense));
     const incCard = h('section.fin-card',
-      h('div.fin-card-head', h('h2', 'Where the money came from'), h('span.fin-muted', `${money(s.income, 0)} from ${s.nInc} cheques`)),
+      h('div.fin-card-head', h('h2', 'Income'), h('span.fin-muted', `${money(s.income, 0)} from ${s.nInc} cheques`)),
       barList(Object.entries(STREAMS).map(([k, st]) => ({ label: st.label, value: s.streams[k].total, note: `${n(s.streams[k].head)} head`, onClick: () => { view.tab = 'inc'; view.stream = k; render(); } })).filter((x) => x.value), s.income),
       h('div.fin-mini-grid',
         mini('Average $ / hog sold', money(s.hog.perHog)), mini('Average weight', n(s.hog.avgWt, 1) + ' kg'), mini('Average index', n(s.hog.index, 1)),
@@ -641,14 +635,10 @@
     ui().modal({ title: isNew ? 'New income' : `Edit ${STREAMS[r.stream].one}`, width: 600, cls: 'fin-dlg', body: form, buttons: dialogFoot(isNew, save, isNew ? null : () => remove(r, `the ${STREAMS[r.stream].one} of ${U.fmt(r.date)} (${money(r.total)})`, render)) });
   }
 
-  /* ---------- Year end (REPORT and Year End sheets) ---------- */
-  function yearEndView(render) {
-    const y = view.year;
-    const wrap = h('div.fin-page');
-    if (lastMonth(y) < 0) { wrap.appendChild(emptyState(y, render)); return wrap; }
-    const s = summarize(y);
+  /** Year-end key figures: [label, value, note]. */
+  function keyFigures(y, s) {
     const sowsSet = Number(finSettings().sows[y]);
-    const key = [
+    return [
       ['Average breeding females', s.sows ? n(s.sows) : '—', sowsSet ? 'set in Finance settings' : s.sows ? 'from the herd records' : 'set it in Finance settings'],
       ['Total income', money(s.income)], ['Total expenses', money(s.expense)], ['Balance', money(s.balance)], ['Profit', pct(s.margin), 'of income'],
       ['Hogs shipped', n(s.shipped), 'hog sales and cripples'], ['Income / hog shipped', money(s.incomePerHog)], ['Expenses / hog shipped', money(s.costPerHog)], ['Profit / hog shipped', money(s.profitPerHog)],
@@ -658,9 +648,20 @@
       ['Average index', n(s.hog.index, 2)], ['Average price', money(s.hog.price, 4), 'average of the loads'], ['Average fat', n(s.hog.fat, 1)], ['Average lean', n(s.hog.lean, 1)],
       ['Total health bonus', money(s.hog.bonusTotal)], ['Average health bonus / hog sold', money(s.hog.bonus, 4)], ['Average lean incentive / hog sold', money(s.hog.leanInc, 4)],
     ];
+  }
+  const unitsOf = (c) => Object.entries(c.units).filter(([, q]) => q).map(([u, q]) => `${n(q, q % 1 ? 1 : 0)} ${u.toLowerCase()}`).join(' + ');
+  const perUnitOf = (c) => { const e = Object.entries(c.units).filter(([, q]) => q); return e.length === 1 ? `${money(c.total / e[0][1], c.total / e[0][1] < 10 ? 3 : 2)} / ${e[0][0].toLowerCase()}` : ''; };
+
+  /* ---------- Year end (REPORT and Year End sheets) ---------- */
+  function yearEndView(render) {
+    const y = view.year;
+    const wrap = h('div.fin-page');
+    if (lastMonth(y) < 0) { wrap.appendChild(emptyState(y, render)); return wrap; }
+    const s = summarize(y);
+    const key = keyFigures(y, s);
     const keyTable = h('table.fin-table.fin-key', h('tbody', key.map(([l, v, note]) => h('tr', h('th', l), h('td.num', v), h('td.fin-muted', note || '')))));
-    const units = (c) => Object.entries(c.units).filter(([, q]) => q).map(([u, q]) => `${n(q, q % 1 ? 1 : 0)} ${u.toLowerCase()}`).join(' + ');
-    const perUnit = (c) => { const e = Object.entries(c.units).filter(([, q]) => q); return e.length === 1 ? `${money(c.total / e[0][1], c.total / e[0][1] < 10 ? 3 : 2)} / ${e[0][0].toLowerCase()}` : ''; };
+    const units = unitsOf;
+    const perUnit = perUnitOf;
     const catRows = [...s.byCat].sort((a, b) => a.code - b.code);
     const sub = (label, list) => { const t = U.sum(list.map((c) => c.total)); return h('tr.sub', h('td'), h('td', label), h('td'), h('td.num', money(t)), h('td'), h('td.num', pct(t / s.expense)), h('td.num', s.shipped ? money(t / s.shipped) : '')); };
     const catTable = h('table.fin-table',
@@ -685,6 +686,206 @@
       ['Type', 'Expense', 'Feed', 'Quantity', 'Total $', 'Average price', '% of expenses', '$ / hog shipped'],
       ...catRows.map((c) => [c.code, c.name, c.feed ? 'yes' : '', units(c), c.total.toFixed(2), perUnit(c), pct(c.total / s.expense), s.shipped ? (c.total / s.shipped).toFixed(2) : ''])]);
     return wrap;
+  }
+
+  /* ---------- Printed finance report (print, or Save as PDF in the print dialog) ---------- */
+  const REPORT_CSS = `
+@page { size: letter; margin: 14mm 13mm 16mm; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #fff; }
+body { font: 10.5px/1.45 "Inter", "Segoe UI", Arial, sans-serif; color: #1f2a4a; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.fr-page { break-after: page; }
+.fr-page:last-child { break-after: auto; }
+.fr-band { background: #1d3fae; color: #fff; border-radius: 14px; padding: 18px 22px; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+.fr-band small { display: block; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; opacity: .8; font-weight: 700; }
+.fr-band h1 { margin: 4px 0 2px; font-size: 26px; line-height: 1.1; font-weight: 800; }
+.fr-band p { margin: 0; opacity: .9; font-size: 11.5px; }
+.fr-band .fr-meta { text-align: right; font-size: 10.5px; opacity: .9; }
+.fr-band .fr-meta b { display: block; font-size: 13px; opacity: 1; }
+.fr-run { display: flex; justify-content: space-between; color: #1d3fae; font-weight: 700; border-bottom: 2px solid #1d3fae; padding-bottom: 5px; margin-bottom: 12px; font-size: 11px; }
+.fr-run span:last-child { color: #5a6482; font-weight: 600; }
+.fr-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin: 14px 0; }
+.fr-kpi { border: 1.5px solid #dfe5f6; border-radius: 12px; padding: 10px 12px; }
+.fr-kpi span { display: block; color: #5a6482; font-size: 9.5px; text-transform: uppercase; letter-spacing: .8px; font-weight: 700; }
+.fr-kpi b { display: block; font-size: 19px; color: #1d3fae; margin: 2px 0 1px; font-variant-numeric: tabular-nums; }
+.fr-kpi em { font-style: normal; color: #5a6482; font-size: 9.5px; }
+.fr-kpi em .up { color: #1e8a4c; font-weight: 700; } .fr-kpi em .down { color: #c0392b; font-weight: 700; }
+.fr-kpi.hero { background: #1d3fae; border-color: #1d3fae; }
+.fr-kpi.hero span, .fr-kpi.hero em { color: #dbe4ff; } .fr-kpi.hero b { color: #fff; }
+.fr-kpi.hero.neg { background: #b03a2e; border-color: #b03a2e; }
+.fr-card { border: 1.5px solid #dfe5f6; border-radius: 12px; padding: 11px 14px 12px; margin-bottom: 11px; break-inside: avoid; }
+.fr-card h2 { margin: 0 0 8px; font-size: 13.5px; color: #1d3fae; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.fr-card h2 small { font-size: 10px; color: #5a6482; font-weight: 600; }
+.fr-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin: 0 4px 0 10px; vertical-align: -1px; }
+.fr-two { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+.fr-bars { list-style: none; margin: 0; padding: 0; }
+.fr-bars li { display: grid; grid-template-columns: 34% 1fr auto; gap: 7px; align-items: center; padding: 3px 0; }
+.fr-bars .l { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fr-bars .t { height: 8px; background: #eef1fa; border-radius: 4px; overflow: hidden; }
+.fr-bars .f { display: block; height: 100%; border-radius: 4px; }
+.fr-bars .v { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 700; }
+.fr-bars .v small { display: block; font-weight: 500; color: #5a6482; font-size: 9px; }
+.fr-minis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 9px; }
+.fr-minis div { background: #f3f6fd; border-radius: 8px; padding: 6px 8px; }
+.fr-minis span { display: block; color: #5a6482; font-size: 9px; }
+.fr-minis b { font-size: 12px; color: #1d3fae; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { padding: 4px 6px; text-align: left; border-bottom: 1px solid #e6eaf5; vertical-align: top; }
+thead th { background: #1d3fae; color: #fff; font-size: 9.5px; text-transform: uppercase; letter-spacing: .5px; font-weight: 700; }
+thead { display: table-header-group; }
+tbody tr:nth-child(even) td { background: #f6f8fd; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+td.neg { color: #c0392b; }
+tfoot td { font-weight: 800; border-top: 2px solid #1d3fae; border-bottom: 0; color: #1d3fae; background: #fff; }
+tr.sub td { font-weight: 700; background: #eef2fc !important; }
+tr { break-inside: avoid; }
+.fr-key td:first-child { color: #3b4669; } .fr-key td.num { font-weight: 700; } .fr-key td.note { color: #7a849f; font-size: 9.5px; }
+.fr-tag { display: inline-block; margin-left: 5px; padding: 0 5px; border-radius: 6px; background: #fff1e0; color: #b35f0d; font-size: 8.5px; font-weight: 700; text-transform: uppercase; }
+.fr-note { color: #5a6482; font-size: 9.5px; margin: 6px 0 0; }
+.fr-foot { margin-top: 10px; color: #8a93ad; font-size: 9px; text-align: center; }
+.fr-card.flow { break-inside: auto; }
+.fr-list td, .fr-list th { font-size: 9.5px; padding: 3px 5px; }
+`;
+
+  /** Monthly income / expense bars as a fixed-size SVG for the printed report. */
+  function reportChart(months, last) {
+    const W = 700; const H = 210; const pad = { l: 52, r: 6, t: 10, b: 24 };
+    const iw = W - pad.l - pad.r; const ih = H - pad.t - pad.b;
+    const max = Math.max(1, ...months.map((m) => Math.max(m.income, m.expense)));
+    const step = niceStep(max / 4); const top = Math.ceil(max / step) * step;
+    const y = (v) => pad.t + ih - (v / top) * ih;
+    const gw = iw / 12; const bw = Math.min(20, gw * 0.32);
+    const short = (v) => (v >= 1e6 ? `$${+(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `$${+(v / 1e3).toFixed(0)}k` : `$${v}`);
+    const bar = (x, v, c) => (v ? `<rect x="${x.toFixed(1)}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${(y(0) - y(v)).toFixed(1)}" rx="2.5" fill="${c}"/>` : '');
+    let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Inter, Segoe UI, Arial, sans-serif">`;
+    for (let v = 0; v <= top + 1e-9; v += step) svg += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="#e6eaf5"/><text x="${pad.l - 7}" y="${y(v) + 3.5}" text-anchor="end" font-size="9.5" fill="#7a849f">${short(v)}</text>`;
+    months.forEach((m, i) => {
+      const cx = pad.l + gw * i + gw / 2;
+      svg += bar(cx - bw - 1, m.income, INCOME) + bar(cx + 1, m.expense, EXPENSE);
+      svg += `<text x="${cx}" y="${H - 7}" text-anchor="middle" font-size="9.5" fill="${i <= last ? '#3b4669' : '#b5bccf'}">${monthName(i)}</text>`;
+    });
+    return svg + `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(0)}" y2="${y(0)}" stroke="#9aa6c8"/></svg>`;
+  }
+
+  /** The whole year as a printable report: summary, chart, expense and income, monthly report, year end; plus the open list. */
+  function reportHTML(y, tab, current) {
+    const E = U.esc;
+    const st = S.store.settings;
+    const last = lastMonth(y);
+    const farm = [st.farmName, st.farmNumber ? `#${st.farmNumber}` : ''].filter(Boolean).join('  ·  ');
+    const printed = U.fmtDT(new Date());
+    const run = (title) => `<div class="fr-run"><span>${E(title)}</span><span>${E(st.farmName || 'SwineOS')} · ${y}</span></div>`;
+    if (last < 0) {
+      return `<div class="fr-page"><div class="fr-band"><div><small>SwineOS · Finance report</small><h1>Income &amp; Expenses ${y}</h1><p>${E(farm)}</p></div></div><p style="margin-top:20px">Nothing recorded for ${y}.</p></div>`;
+    }
+    const s = summarize(y);
+    const hasPrev = lastMonth(y - 1) >= 0;
+    const p = hasPrev ? summarize(y - 1, last) : null;
+    const period = last === 11 ? `January – December ${y}` : `January – ${new Date(Date.UTC(y, last, 1)).toLocaleString('en-US', { month: 'long', timeZone: 'UTC' })} ${y} (year to date)`;
+    const chg = (cur, prev, upGood) => {
+      if (!p || !Number.isFinite(cur) || !Number.isFinite(prev) || !prev) return '';
+      const d = (cur - prev) / Math.abs(prev);
+      const good = (d > 0) === upGood;
+      return `<span class="${d === 0 ? '' : good ? 'up' : 'down'}">${d > 0 ? '▲' : d < 0 ? '▼' : '='} ${Math.abs(d * 100).toFixed(1)}%</span> vs ${y - 1}`;
+    };
+    const kpi = (label, value, note, cls = '') => `<div class="fr-kpi ${cls}"><span>${E(label)}</span><b>${E(value || '—')}</b><em>${note || '&nbsp;'}</em></div>`;
+    const bars = (items, total, color) => {
+      if (!items.length) return '<p class="fr-note">Nothing recorded.</p>';
+      const max = Math.max(...items.map((x) => x.value));
+      return `<ul class="fr-bars">${items.map((x) => `<li><span class="l">${E(x.label)}${x.tag ? `<span class="fr-tag">${E(x.tag)}</span>` : ''}</span><span class="t"><span class="f" style="width:${Math.max(0.5, (x.value / max) * 100).toFixed(1)}%;background:${color}"></span></span><span class="v">${E(money(x.value, 0))}<small>${E(x.note || pct(x.value / total))}</small></span></li>`).join('')}</ul>`;
+    };
+    // expense types: the ten largest, the rest together
+    const topCats = s.byCat.slice(0, 10).map((c) => ({ label: c.name, value: c.total, tag: c.feed ? 'feed' : '' }));
+    const rest = s.byCat.slice(10);
+    if (rest.length) topCats.push({ label: `${rest.length} other types`, value: U.sum(rest.map((c) => c.total)) });
+    const streams = Object.entries(STREAMS).map(([k, x]) => ({ label: x.label, value: s.streams[k].total, note: `${n(s.streams[k].head)} head · ${pct(s.streams[k].total / s.income)}` })).filter((x) => x.value);
+
+    const page1 = `<section class="fr-page">
+      <div class="fr-band"><div><small>SwineOS · Finance report</small><h1>Income &amp; Expenses ${y}</h1><p>${E(farm)}</p></div>
+        <div class="fr-meta"><b>${E(period)}</b>Printed ${E(printed)}</div></div>
+      <div class="fr-kpis">
+        ${kpi('Balance', money(s.balance, 0), `Profit ${pct(s.margin)} of income`, s.balance >= 0 ? 'hero' : 'hero neg')}
+        ${kpi('Income', money(s.income, 0), chg(s.income, p && p.income, true) || `${n(s.nInc)} cheques`)}
+        ${kpi('Expenses', money(s.expense, 0), chg(s.expense, p && p.expense, false) || `${n(s.nExp)} bills`)}
+        ${kpi('Hogs shipped', n(s.shipped), chg(s.shipped, p && p.shipped, true) || 'Hog sales and cripples')}
+        ${kpi('Profit / hog', money(s.profitPerHog), chg(s.profitPerHog, p && p.profitPerHog, true))}
+        ${kpi('Feed cost / hog', money(s.feedPerHog), chg(s.feedPerHog, p && p.feedPerHog, false) || `${money(s.feedCost, 0)} feed in total`)}
+      </div>
+      <div class="fr-card"><h2>Income and Expenses by month<span class="fr-legend"><i style="background:${INCOME}"></i>Income<i style="background:${EXPENSE}"></i>Expenses</span></h2>${reportChart(s.months, last)}</div>
+      <div class="fr-two">
+        <div class="fr-card"><h2>Expense<small>${E(money(s.expense, 0))} · ${n(s.nExp)} bills</small></h2>${bars(topCats, s.expense, EXPENSE)}</div>
+        <div class="fr-card"><h2>Income<small>${E(money(s.income, 0))} · ${n(s.nInc)} cheques</small></h2>${bars(streams, s.income, INCOME)}
+          <div class="fr-minis">
+            <div><span>Average $ / hog sold</span><b>${E(money(s.hog.perHog) || '—')}</b></div>
+            <div><span>Average weight</span><b>${Number.isFinite(s.hog.avgWt) ? E(n(s.hog.avgWt, 1)) + ' kg' : '—'}</b></div>
+            <div><span>Average index</span><b>${E(n(s.hog.index, 1) || '—')}</b></div>
+            <div><span>Average price</span><b>${s.hog.price ? E(money(s.hog.price, 3)) + '/kg' : '—'}</b></div>
+            <div><span>Income / sow / year</span><b>${s.sows ? E(money(s.incomePerSow, 0)) : '—'}</b></div>
+            <div><span>Hogs / sow / year</span><b>${s.sows ? E(n(s.shippedPerSow, 1)) : '—'}</b></div>
+          </div></div>
+      </div></section>`;
+
+    const months = s.months.filter((m) => m.m <= last);
+    const per = (a, b) => (b ? money(a / b) : '');
+    const monthRows = months.map((m) => `<tr><td>${monthName(m.m)}</td><td class="num">${money(m.income)}</td><td class="num">${money(m.expense)}</td><td class="num${m.income - m.expense < 0 ? ' neg' : ''}">${money(m.income - m.expense)}</td><td class="num">${n(m.shipped)}</td><td class="num">${per(m.income, m.shipped)}</td><td class="num">${per(m.expense, m.shipped)}</td><td class="num">${per(m.income - m.expense, m.shipped)}</td><td class="num">${m.idxHead ? n(m.idx / m.idxHead, 1) : ''}</td><td class="num">${m.wtHead ? n(m.wt / m.wtHead, 1) : ''}</td></tr>`).join('');
+    const ti = U.sum(months.map((m) => m.idx)); const tih = U.sum(months.map((m) => m.idxHead)); const tw = U.sum(months.map((m) => m.wt)); const twh = U.sum(months.map((m) => m.wtHead));
+    const key = keyFigures(y, s);
+    const half = Math.ceil(key.length / 2);
+    const keyTable = (list) => `<table class="fr-key"><tbody>${list.map(([l, v, note]) => `<tr><td>${E(l)}${note ? `<div class="note">${E(note)}</div>` : ''}</td><td class="num">${E(v)}</td></tr>`).join('')}</tbody></table>`;
+    const page2 = `<section class="fr-page">${run('Monthly report and year end')}
+      <div class="fr-card"><h2>Monthly report<small>Hogs shipped = hog sales and cripples</small></h2>
+        <table><thead><tr><th>Month</th><th class="num">Income</th><th class="num">Expenses</th><th class="num">Balance</th><th class="num">Hogs</th><th class="num">Income / hog</th><th class="num">Cost / hog</th><th class="num">Profit / hog</th><th class="num">Index</th><th class="num">Weight</th></tr></thead>
+        <tbody>${monthRows}</tbody>
+        <tfoot><tr><td>Total</td><td class="num">${money(s.income)}</td><td class="num">${money(s.expense)}</td><td class="num">${money(s.balance)}</td><td class="num">${n(s.shipped)}</td><td class="num">${per(s.income, s.shipped)}</td><td class="num">${per(s.expense, s.shipped)}</td><td class="num">${per(s.balance, s.shipped)}</td><td class="num">${tih ? n(ti / tih, 1) : ''}</td><td class="num">${twh ? n(tw / twh, 1) : ''}</td></tr></tfoot></table></div>
+      <div class="fr-card"><h2>Year end ${y}${last < 11 ? `<small>${E(period)}</small>` : ''}</h2><div class="fr-two">${keyTable(key.slice(0, half))}${keyTable(key.slice(half))}</div></div>
+    </section>`;
+
+    const catRows = [...s.byCat].sort((a, b) => a.code - b.code);
+    const sub = (label, list) => { const t = U.sum(list.map((c) => c.total)); return `<tr class="sub"><td></td><td>${E(label)}</td><td></td><td class="num">${money(t)}</td><td></td><td class="num">${pct(t / s.expense)}</td><td class="num">${s.shipped ? money(t / s.shipped) : ''}</td></tr>`; };
+    const totHead = U.sum(Object.values(s.streams).map((t) => t.head));
+    const page3 = `<section class="fr-page">${run('Income and expenses by type')}
+      <div class="fr-card"><h2>Income</h2><table><thead><tr><th>Income</th><th class="num">Head</th><th class="num">Total $</th><th class="num">$ / head</th><th class="num">% of income</th></tr></thead><tbody>
+        ${Object.entries(STREAMS).map(([k, x]) => { const t = s.streams[k]; return `<tr><td>${E(x.label)}</td><td class="num">${n(t.head)}</td><td class="num">${money(t.total)}</td><td class="num">${t.head ? money(t.total / t.head) : ''}</td><td class="num">${pct(t.total / s.income)}</td></tr>`; }).join('')}
+        </tbody><tfoot><tr><td>Total income</td><td class="num">${n(totHead)}</td><td class="num">${money(s.income)}</td><td class="num">${totHead ? money(s.income / totHead) : ''}</td><td class="num">100.0%</td></tr></tfoot></table></div>
+      <div class="fr-card"><h2>Expenses by type</h2><table><thead><tr><th>Type</th><th>Expense</th><th>Quantity</th><th class="num">Total $</th><th>Average price</th><th class="num">% of exp.</th><th class="num">$ / hog</th></tr></thead><tbody>
+        ${catRows.map((c) => `<tr><td>${E(String(c.code || '–'))}</td><td>${E(c.name)}${c.feed ? '<span class="fr-tag">feed</span>' : ''}</td><td>${E(unitsOf(c))}</td><td class="num">${money(c.total)}</td><td>${E(perUnitOf(c))}</td><td class="num">${pct(c.total / s.expense)}</td><td class="num">${s.shipped ? money(c.total / s.shipped) : ''}</td></tr>`).join('')}
+        </tbody><tfoot>${sub('Feed', catRows.filter((c) => c.feed))}${sub('Other expenses', catRows.filter((c) => !c.feed))}${sub('Total expenses', catRows)}</tfoot></table></div>
+      <p class="fr-foot">SwineOS · ${E(farm)} · printed ${E(printed)}</p>
+    </section>`;
+
+    // the list open on the Expenses or Income tab, as filtered there
+    let page4 = '';
+    if ((tab === 'exp' || tab === 'inc') && current && current.printNode) {
+      const t = current.printNode();
+      const tbl = t.tagName === 'TABLE' ? t : t.querySelector('table');
+      if (tbl) {
+        tbl.className = 'fr-list';
+        U.$$('td', tbl).forEach((td) => { if (td.style.textAlign === 'right') { td.removeAttribute('style'); td.className = 'num'; } });
+        page4 = `<section class="fr-page">${run(current.printTitle || 'List')}<div class="fr-card flow"><h2>${E(current.printTitle || '')}<small>${U.$$('tbody tr', tbl).length} records</small></h2>${tbl.outerHTML}</div></section>`;
+      }
+    }
+    return page1 + page2 + page3 + page4;
+  }
+
+  /** Print the finance report from a hidden frame; the print dialog's "Save as PDF" makes the PDF. */
+  function printReport(y, tab, current) {
+    const st = S.store.settings;
+    const title = `Finance report ${y}${st.farmName ? ' - ' + st.farmName : ''}`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${U.esc(title)}</title><style>${REPORT_CSS}</style></head><body>${reportHTML(y, tab, current)}</body></html>`;
+    U.$$('iframe.fin-print-frame').forEach((f) => f.remove());
+    const frame = h('iframe.fin-print-frame', { title: 'Finance report', 'aria-hidden': 'true', style: { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' } });
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument;
+    doc.open(); doc.write(html); doc.close();
+    const save = () => {
+      ui().saveFile(title.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.html', html, 'text/html');
+      ui().toast('Printing is not available here. The report was saved as a file: open it in your browser and print it or save it as a PDF.');
+    };
+    if (window.claude) { frame.remove(); save(); return; } // the Claude app has no print dialog
+    const go = () => {
+      try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch (e) { save(); }
+    };
+    setTimeout(go, 300);
   }
 
   /* ---------- Finance settings ---------- */
@@ -782,5 +983,5 @@
 
   const VIEWS = { overview: overviewView, exp: expensesView, inc: incomeView, year: yearEndView };
 
-  S.finance = { open, summarize, importDialog: (done) => importDialog(done || (() => {})) };
+  S.finance = { open, summarize, reportHTML, importDialog: (done) => importDialog(done || (() => {})) };
 })(window.SOS);
