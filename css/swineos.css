@@ -703,3 +703,50 @@ button { cursor: pointer; }
 .fin-card p { margin: 0 0 20px; line-height: 1.45; }
 .ld-back { background: var(--royal); color: #fff; border: 0; border-radius: 10px; padding: 10px 18px; font: 600 15px var(--ui); cursor: pointer; }
 .ld-back:hover { background: var(--royal-2); }
+
+/* ---------- Herd records main menu: tiles with pill buttons (royal blue and white) ---------- */
+.home-win { background: var(--royal-soft); }
+.home-win > .win-title { background: var(--royal); }
+.mm2-body { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(280px, 0.78fr); gap: 18px; padding: 18px; align-items: start; }
+.mm2-tile { background: #fff; border-radius: 16px; box-shadow: 0 4px 16px rgba(29, 63, 174, .12); padding: 18px 18px 20px; color: #26304d; }
+.mm2-main { border-top: 6px solid var(--royal); }
+@media (min-width: 1151px) {
+  .mm2-main .pills { grid-template-columns: 1fr 1fr; gap: 14px; }
+  .mm2-main .pill { min-height: 64px; font-size: 20px; }
+}
+.mm2-side { display: flex; flex-direction: column; gap: 18px; }
+.mm2-head h2 { margin: 0; color: var(--royal); font: 800 28px/1.1 var(--bold); }
+.mm2-small .mm2-head h2 { font-size: 19px; }
+.mm2-head p { margin: 4px 0 0; color: #5a6482; font-size: 14px; }
+.pills { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-top: 18px; }
+.pill { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 54px; padding: 10px 22px; border-radius: 999px;
+  border: 2px solid var(--royal); background: #fff; color: var(--royal); font: 700 18px var(--bold); cursor: pointer; transition: background .12s, color .12s, box-shadow .12s; }
+.pill:hover:not(:disabled) { background: var(--royal); color: #fff; box-shadow: 0 4px 12px rgba(29, 63, 174, .25); }
+.pill:focus-visible { outline: 3px solid #9db4ff; outline-offset: 2px; }
+.pill:disabled, .pill.disabled { border-color: #c5cbe0; color: #9aa3bf; cursor: not-allowed; }
+.mm2-entry .pill:first-child, .mm2-reports .pill:first-child { background: var(--royal); color: #fff; }
+.mm2-entry .pill:first-child:hover, .mm2-reports .pill:first-child:hover { background: var(--royal-2); }
+.pills-sm { grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.pills-sm .pill { min-height: 44px; font-size: 15px; padding: 8px 14px; }
+.pill-ico { width: 22px; height: 22px; display: inline-grid; place-items: center; }
+.pill-ico svg { width: 100%; height: 100%; }
+.mm2-dl { margin: 12px 0 10px; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; }
+.mm2-dl dt { color: #5a6482; font-weight: 600; }
+.mm2-dl dd { margin: 0; overflow-wrap: anywhere; }
+.mm2-lic .mm-link { color: var(--royal); font-size: 13px; text-decoration: underline; padding: 0; background: none; border: 0; text-align: left; }
+.mm2-lic .mm-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.mm2-lic .mini-kpi { background: var(--royal-soft); border: 1px solid #cdd7f6; border-radius: 10px; color: #26304d; padding: 6px 8px; text-align: left; }
+.mm2-lic .mini-kpi b { color: var(--royal); font-size: 18px; }
+.mm2-lic .mini-kpi span { color: #5a6482; }
+.mm2-lic .mini-kpi:hover { border-color: var(--royal); }
+@media (max-width: 1150px) {
+  .mm2-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .mm2-side { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 720px) {
+  .mm2-body { grid-template-columns: 1fr; padding: 12px; gap: 12px; }
+  .mm2-side { grid-template-columns: 1fr; }
+  .pills { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pill { min-height: 48px; font-size: 15px; padding: 8px 12px; }
+  .mm2-head h2 { font-size: 23px; }
+}

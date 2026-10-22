@@ -14,52 +14,61 @@
       b('help', 'Help', () => S.app.help('home')));
   }
 
+  /** Herd records main menu: Data entry and Reports tiles, licence / farm tile and the SwineOS tile. */
   function home() {
     const st = S.store.settings;
     const o = st.owner || {};
     const win = h('section.win.home-win');
-    win.appendChild(h('div.win-title', h('span.win-name', `SwineOS  -  [${st.farmNumber} ${st.farmName}]`)));
-    const G = (label, fn, opts = {}) => h('button.green-btn' + (opts.disabled ? '.disabled' : ''), { type: 'button', disabled: opts.disabled, title: opts.title || label, onclick: fn }, label);
-    const B = (label, fn) => h('button.blue-btn', { type: 'button', onclick: fn }, label);
+    win.appendChild(h('div.win-title', h('span.win-name', `SwineOS – Herd records  -  [${st.farmNumber} ${st.farmName}]`)));
+    const pill = (label, fn, opts = {}) => h('button.pill' + (opts.disabled ? '.disabled' : ''), { type: 'button', disabled: opts.disabled, title: opts.title || label, onclick: fn },
+      opts.icon ? h('span.pill-ico', { html: ui().ICONS[opts.icon] || '' }) : null, h('span', label));
     const fem = S.store.animals().filter((a) => a.sex === 'F' && !A(a).removed);
     const c = (s) => fem.filter((a) => A(a).status === s).length;
     const gest = st.gestationLength;
     const due7 = fem.filter((a) => A(a).status === 'Served' && U.diff(U.addDays(A(a).lastService.date, gest), U.today()) <= 7).length;
     const wean = fem.filter((a) => A(a).lactating && U.diff(U.today(), A(a).currentLitter.farrowDate) >= st.targetLactation).length;
-    const tile = (label, v, fn) => h('button.mini-kpi', { type: 'button', onclick: fn }, h('b', String(v)), h('span', label));
-    win.appendChild(h('div.mm-body',
-      h('nav.mm-left', h('h2', 'Data Entry'),
-        G('Sows / Boars', () => S.app.entry()),
-        G('Gilt pool', () => S.app.show(S.entry.openGiltPool)),
-        G('Action list entry', () => S.app.show(S.actionEntry.open)),
-        G('Vaccinations', () => S.app.show(S.reports.vaccinationsEntry)),
-        G('PigPAD', null, { disabled: true, title: 'Handheld entry is not available' }),
-        G('More options', moreOptions)),
-      h('div.mm-center',
-        h('div.mm-head', h('div.mm-title', 'SwineOS Main Menu'), h('div.mm-sub', 'Breeding Herd Management Module')),
-        h('div.mm-logo', h('div.mm-pig', { html: ui().ICONS.sow }), h('div.mm-word', h('span.l1', 'Swine'), h('span.l2', 'OS'), h('sup', '®'))),
-        h('div.mm-info',
-          h('div.mm-lic',
-            h('div.mm-cy', 'This software', h('br'), 'is licensed to:'),
-            h('div.mm-lines', [o.license ? 'License : ' + o.license : null, o.name, o.address, o.city].filter(Boolean).map((l) => h('div', l))),
-            h('div.mm-cy', 'Currently selected farm:'), h('div.mm-lines', h('div', `${st.farmNumber} ${st.farmName}`)),
-            S.drive.available() ? h('div.mm-cy', 'Google Drive folder:') : null,
-            S.drive.available() ? h('div.mm-lines', S.drive.configured()
-              ? h('button.mm-link', { type: 'button', onclick: () => S.settingsUI.open('drive') }, `${S.drive.folderLabel()}${S.drive.config.email ? '  (' + S.drive.config.email + ')' : ''}`)
-              : h('button.mm-link', { type: 'button', onclick: () => S.settingsUI.open('drive') }, 'Not connected – click to connect')) : null),
+    const kpi = (label, v, fn) => h('button.mini-kpi', { type: 'button', onclick: fn }, h('b', String(v)), h('span', label));
+    const tileHead = (title, sub) => h('header.mm2-head', h('h2', title), sub ? h('p', sub) : null);
+    win.appendChild(h('div.mm2-body',
+      h('section.mm2-tile.mm2-main.mm2-entry',
+        tileHead('Data Entry', 'Record what happens in the barn'),
+        h('div.pills',
+          pill('Sows / Boars', () => S.app.entry()),
+          pill('Gilt pool', () => S.app.show(S.entry.openGiltPool)),
+          pill('Action list entry', () => S.app.show(S.actionEntry.open)),
+          pill('Vaccinations', () => S.app.show(S.reports.vaccinationsEntry)),
+          pill('PigPAD', null, { disabled: true, title: 'Handheld entry is not available' }),
+          pill('More options', moreOptions))),
+      h('section.mm2-tile.mm2-main.mm2-reports',
+        tileHead('Reports', 'Herd results, lists and cards'),
+        h('div.pills',
+          pill('Sows / Gilts', () => S.app.reports('sows')),
+          pill('Piglets', () => S.app.reports('piglets')),
+          pill('Boars', () => S.app.reports('boars')),
+          pill('Sow cards', () => S.sowCard.open()),
+          pill('Herd performance', () => S.app.show(S.reports.herdPerformance)),
+          pill('Action lists', () => S.actionLists.open()),
+          pill('Report generator', () => S.reportGen.open()))),
+      h('div.mm2-side',
+        h('section.mm2-tile.mm2-small.mm2-lic',
+          tileHead('Licence and farm'),
+          h('dl.mm2-dl',
+            h('dt', 'Licensed to'), h('dd', [o.license ? 'Licence: ' + o.license : null, o.name, o.address, o.city].filter(Boolean).join(' · ') || '–'),
+            h('dt', 'Farm'), h('dd', `${st.farmNumber || ''} ${st.farmName || ''}`.trim() || '–'),
+            S.drive.available() ? h('dt', 'Google Drive folder') : null,
+            S.drive.available() ? h('dd', h('button.mm-link', { type: 'button', onclick: () => S.settingsUI.open('drive') },
+              S.drive.configured() ? `${S.drive.folderLabel()}${S.drive.config.email ? '  (' + S.drive.config.email + ')' : ''}` : 'Not connected – click to connect')) : null),
           h('div.mm-kpis',
-            tile('breeding females', fem.length, () => S.app.entry('Current')), tile('served', c('Served'), () => S.app.entry('Served')),
-            tile('lactating', c('Lactating'), () => S.app.entry('Lactating')), tile('open / gilts', c('Open') + c('Gilt'), () => S.app.entry('Open')),
-            tile('due ≤ 7 d or overdue', due7, () => S.actionLists.open()), tile('ready to wean', wean, () => S.actionLists.open())))),
-      h('nav.mm-right', h('h2', 'Reports'),
-        B('Sows / Gilts', () => S.app.reports('sows')),
-        B('Piglets', () => S.app.reports('piglets')),
-        B('Boars', () => S.app.reports('boars')),
-        B('Sow cards', () => S.sowCard.open()),
-        B('Herd performance', () => S.app.show(S.reports.herdPerformance)),
-        B('Action lists', () => S.actionLists.open()),
-        B('Report generator', () => S.reportGen.open()))));
-    win.appendChild(bottomBar('litter'));
+            kpi('breeding females', fem.length, () => S.app.entry('Current')), kpi('served', c('Served'), () => S.app.entry('Served')),
+            kpi('lactating', c('Lactating'), () => S.app.entry('Lactating')), kpi('open / gilts', c('Open') + c('Gilt'), () => S.app.entry('Open')),
+            kpi('due ≤ 7 d or overdue', due7, () => S.actionLists.open()), kpi('ready to wean', wean, () => S.actionLists.open()))),
+        h('section.mm2-tile.mm2-small.mm2-nav',
+          tileHead('SwineOS'),
+          h('div.pills.pills-sm',
+            pill('SwineOS home', () => S.app.landing(), { icon: 'sow' }),
+            pill('PigMAIN', () => S.app.show(pigMain), { icon: 'backup' }),
+            pill('Selfservice', selfService, { icon: 'find' }),
+            pill('Help', () => S.app.help('home'), { icon: 'help' }))))));
     return win;
   }
 
