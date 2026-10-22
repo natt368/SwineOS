@@ -1,4 +1,4 @@
-/* SwineOS – landing page (Herd records / Finances) and the Finances placeholder. */
+/* SwineOS – landing page (Herd records / Finances). */
 (function (S) {
   'use strict';
   const U = S.U; const h = U.h;
@@ -24,24 +24,10 @@
       h('p.ld-tag', 'Sow herd records and farm finances'),
       h('div.ld-btns',
         btn(ICON_HERD, 'Herd records', 'Matings, farrowings, weaning, sow cards and reports', () => S.app.home()),
-        btn(ICON_MONEY, 'Finances', 'Income and expenses', () => S.app.finances()))));
+        btn(ICON_MONEY, 'Finances', 'Income, expenses, year end and barn parts', () => S.app.finances()))));
     win.appendChild(h('footer.ld-foot', farmLine()));
     return win;
   }
 
-  /** Finances: the income and expense tracker is not designed yet. */
-  function finances() {
-    const win = ui().appWindow({ title: 'Finances', cls: 'fin-win', onClose: () => S.app.landing(), toolbar: [
-      { icon: 'close', label: 'Close', onClick: () => S.app.landing() },
-    ] });
-    win.appendChild(h('div.fin-body',
-      h('div.fin-card',
-        h('span.ld-ico', { html: ICON_MONEY }),
-        h('h2', 'Income and expense tracker'),
-        h('p', 'Coming soon. This is where the farm\'s income and expenses will be recorded.'),
-        h('button.ld-back', { type: 'button', onclick: () => S.app.landing() }, '← Back to SwineOS'))));
-    return win;
-  }
-
-  S.landing = { landing, finances };
+  S.landing = { landing };
 })(window.SOS);

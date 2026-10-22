@@ -1,6 +1,6 @@
 # SwineOS
 
-Sow herd management for the barn office: record breeding, farrowing and weaning events, print the weekly action lists, and follow herd performance. The screens follow the layout of the classic PigWIN desktop program, so the people who already use it can find their way around.
+Sow herd management for the barn office: record breeding, farrowing and weaning events, print the weekly action lists, follow herd performance, and keep the farm's income and expenses. The screens follow the layout of the classic PigWIN desktop program, so the people who already use it can find their way around.
 
 It is a plain web app (HTML, CSS and JavaScript, no build step and no server). Open `index.html` in a browser, or use the hosted copy.
 
@@ -51,6 +51,15 @@ Piglets lost between farrowing and weaning that were never entered as deaths are
 - Herd inventory, population dynamics, sow productivity, removals manager, parity, farrowing location, benchmarking against targets, cohort analysis, farrowing rate monitor, sow inventory, sow selection (culling lists), vaccinations, sow cards, blank record sheets, change log, data export.
 - Application tools on litter records: breakdown, cross tabulation, histogram, scatter table, statistics, frequency distribution, time plot, X-Y plot.
 - Piglet reports (deaths, fostering, piglet inventory, weaning list) and boar reports (inventory, usage per week, farrowing rate and litter size per boar).
+
+**Finances** – the barn's income and expense book, in place of the *Expense & Income* and *Barn parts* Excel workbooks (royal blue and white, like the start screen).
+- **Overview** for the chosen year: balance, income, expenses, hogs shipped, profit and feed cost per hog (compared with the same months of last year), a month-by-month chart, where the money went (by expense type) and came from, and the monthly report from the workbook's REPORT sheet.
+- **Expenses**: every bill with product, company, quantity, unit, total, $ / unit and the TYPE code. Filter by month, type or company, or search. A product bought before fills in its company, unit and type and shows the last price paid.
+- **Income**: Hog sales (head, cheque, average and total weight, index, price, fat, lean, health bonus, lean incentive), Cripples and Cull sows & boars, with totals and head-weighted averages.
+- **Year end**: the REPORT and Year End sheets – total income and expenses, balance, profit, income / expense / profit / feed cost per hog shipped, income and hogs per sow per year, hog sale averages, and every expense type with quantity, average price, share of expenses and $ / hog shipped (feed and other expenses subtotalled).
+- **Barn parts**: the parts and suppliers list (order code, part number, company, phone, who to talk to, what it is for), searchable; phone numbers can be tapped on a phone.
+- **Import Excel** reads the workbooks as they are (.xls or .xlsx, in the browser; nothing is uploaded). Columns are found by their header, so the import matches the workbook's own totals. Importing an updated copy replaces that year's records. **Finance settings** hold the expense types (name, and whether they count as feed) and the number of sows per year (blank: counted from the herd records).
+- Print and Export (CSV for Excel) work on the open tab. Finance records are saved and backed up with the herd (backup file, Google Drive, shared online database); two computers combine their finance records record by record, like the herd.
 
 **Sow cards** – one sow's card as in the old program: averages and last litter (farrowing interval, gestation length, born alive / dead, mummified, deaths, net foster, weaned), last service boar, full history with mating groups and due dates (farrowings in yellow), selected events, lifetime summary or comments; due date, alt ID, genetics, location, mating group, status and parity on the right. Build a print list from the Available / Selected lists or pick sows with *Mating +21 / +35 / +42 / +60* and *Due date −15 / −10 / −5* for a From–To period.
 
@@ -123,4 +132,6 @@ The workflow in `.github/workflows/pages.yml` publishes the default branch. Unti
 | `js/actionlists.js` | Action lists dialog and printout |
 | `js/settings.js` | Settings, backup / restore, import |
 | `js/demo.js` | Example herd generator |
+| `js/finance.js` | Finances window: overview, expenses, income, year end, barn parts, entry forms |
+| `js/finance-import.js`, `js/xls.js` | Reading the Expense & Income and Barn parts workbooks (.xls / .xlsx) |
 | `js/ui.js`, `js/util.js` | Window, dialog, grid and chart helpers; dates and formatting |

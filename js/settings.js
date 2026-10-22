@@ -140,7 +140,7 @@
     if (!data || !Array.isArray(data.animals)) { ui().alertBox('Restore failed', 'This file is not a SwineOS backup (no animals found).'); return; }
     const ok = await ui().confirmBox('Restore backup', `Replace all current records with the backup from ${data.exported ? U.fmtDT(data.exported) : 'this file'} (${data.animals.length} animals)?`, 'Replace records');
     if (!ok) return;
-    await S.store.replaceAll(data.animals, data.settings, progress(prog), { log: data.log });
+    await S.store.replaceAll(data.animals, data.settings, progress(prog), { log: data.log, fin: data.fin });
     S.model.resetCache();
     S.store.log(`Restored backup with ${data.animals.length} animals`);
     ui().toast('Backup restored.', 'ok');
