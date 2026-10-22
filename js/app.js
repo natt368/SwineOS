@@ -19,7 +19,11 @@
       rerenderFn = rerender || null;
       window.scrollTo(0, 0);
     },
+    /** First screen: Herd records / Finances. */
+    landing() { app.mount(S.landing.landing(), () => app.landing()); location.hash === '' || history.replaceState(null, '', location.pathname); },
+    /** Herd records main menu (data entry and reports). */
     home() { app.mount(S.mainMenu.home(), () => app.home()); location.hash === '' || history.replaceState(null, '', location.pathname); },
+    finances() { app.mount(S.landing.finances(), null); },
     reports(section = 'sows') { app.mount(S.reports.menu(section), () => app.reports(section)); },
     entry(list) { const w = S.entry.open(list ? { list } : {}); app.mount(w, null); },
     show(fn) { const w = fn(); if (w) app.mount(w, null); },
@@ -99,15 +103,16 @@
       // keep open windows current when records change (e.g. another computer saves)
       if (!U.$('.modal-back') && app.current && app.current.refresh) app.current.refresh();
       else if (!U.$('.modal-back') && app.current && app.current.classList.contains('home-win')) app.home();
+      else if (!U.$('.modal-back') && app.current && app.current.classList.contains('landing-win')) app.landing();
       lastCount = S.store.animals().length;
     });
     if (S.drive.configured()) {
       // load the newest Google Drive backup before deciding the herd is empty; keep the pig running meanwhile
       if (!S.store.animals().length) loadingText('Loading herd from Google Drive…');
-      else app.home();
+      else app.landing();
       await Promise.race([S.drive.startup(), new Promise((r) => setTimeout(r, S.store.animals().length ? 20000 : 60000))]);
     }
-    if (root.querySelector('.loading')) app.home();
+    if (root.querySelector('.loading')) app.landing();
     if (!S.store.animals().length && !U.$('.modal-back')) {
       if (S.drive.configured() && S.drive.status.state === 'connect') ui().toast('Click anywhere to load your herd from Google Drive.');
       else welcome();

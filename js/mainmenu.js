@@ -8,7 +8,7 @@
   function bottomBar(active) {
     const b = (ic, label, fn, on) => h('button.tb-btn' + (on ? '.active' : ''), { type: 'button', onclick: fn }, ui().icon(ic), h('span', label));
     return h('div.toolbar.main-bottom',
-      b('sow', 'SwineOS', () => S.app.home(), active === 'litter'),
+      b('sow', 'SwineOS home', () => S.app.landing(), active === 'litter'),
       b('backup', 'PigMAIN', () => S.app.show(pigMain), active === 'main'),
       b('find', 'Selfservice', selfService),
       b('help', 'Help', () => S.app.help('home')));

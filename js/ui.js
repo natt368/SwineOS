@@ -106,11 +106,11 @@
   }
 
   /* ---------- application window (title bar + toolbar) ---------- */
-  function appWindow({ title, toolbar = [], cls = '' }) {
+  function appWindow({ title, toolbar = [], cls = '', onClose }) {
     const farm = S.store.settings;
     const sub = farm ? `  -  [${farm.farmNumber} ${farm.farmName}]` : '';
     const win = h('section.win' + (cls ? '.' + cls.trim().split(/\s+/).join('.') : ''));
-    const bar = h('div.win-title', h('span.win-name', title + sub), h('button.win-x', { title: 'Close', 'aria-label': 'Close', onclick: () => S.app.home() }, '✕'));
+    const bar = h('div.win-title', h('span.win-name', title + sub), h('button.win-x', { title: 'Close', 'aria-label': 'Close', onclick: () => (onClose ? onClose() : S.app.home()) }, '✕'));
     const tb = h('div.toolbar');
     toolbar.forEach((t) => {
       if (t === '|') { tb.appendChild(h('span.tb-sep')); return; }
