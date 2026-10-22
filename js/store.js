@@ -3,7 +3,7 @@
  *  - Shared cloud database (when the app runs as a claude.ai Artifact with the db capability)
  *  - The browser's localStorage (any other host, e.g. GitHub Pages / local file)
  * Every animal is one record holding its own event history.
- * Finance records (expenses, income, barn parts) are kept beside the herd and go into the same backups.
+ * Finance records (expenses and income) are kept beside the herd and go into the same backups.
  */
 (function (S) {
   'use strict';
@@ -14,7 +14,7 @@
     savedAt: '', // when the herd records last changed (ISO time)
     settings: null,
     animals: new Map(), // uid -> animal
-    fin: new Map(), // id -> finance record (expense, income or barn part)
+    fin: new Map(), // id -> finance record (expense or income)
     log: [],
     backend: 'local',
     ready: false,
