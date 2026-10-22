@@ -171,7 +171,7 @@
     if (!add.length) { ui().alertBox('Import', 'No new animals found in this file (existing IDs are skipped).'); return; }
     const ok = await ui().confirmBox('Import animals', `Add ${add.length} new animals?`, 'Import');
     if (!ok) return;
-    await S.store.replaceAll([...S.store.animals(), ...add], null, progress(prog));
+    await S.store.replaceAll([...S.store.animals(), ...add], null, progress(prog), { additive: true });
     S.store.log(`Imported ${add.length} animals from CSV`);
     ui().toast(`${add.length} animals imported.`, 'ok');
   }

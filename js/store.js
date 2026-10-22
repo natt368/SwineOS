@@ -16,6 +16,10 @@
     log: [],
     backend: 'local',
     ready: false,
+    // for merging backups made on two computers: when animals / events were deleted,
+    // and when the whole herd was last replaced (PigWIN import, restore, example herd, clear)
+    tombs: { a: {}, e: {} },
+    replacedAt: '',
   };
   const listeners = new Set();
   const changeListeners = new Set(); // user changes only (not loads)
@@ -85,10 +89,12 @@
     ((raw && raw.animals) || []).forEach((a) => state.animals.set(a.uid, a));
     state.log = (raw && raw.log) || [];
     state.savedAt = (raw && raw.savedAt) || '';
+    state.tombs = (raw && raw.tombs) || { a: {}, e: {} };
+    state.replacedAt = (raw && raw.replacedAt) || '';
   }
   function saveLocal() { saveState.localPending = true; saveNotify(); saveLocalNow(); }
   const saveLocalNow = U.debounce(async () => {
-    const data = { savedAt: state.savedAt, settings: state.settings, animals: [...state.animals.values()], log: state.log.slice(-2000) };
+    const data = { savedAt: state.savedAt, settings: state.settings, animals: [...state.animals.values()], log: state.log.slice(-2000), tombs: state.tombs, replacedAt: state.replacedAt };
     try {
       await idbPut(LS_KEY, data);
       try { localStorage.removeItem(LS_KEY); } catch (e) { /* ignore */ }
@@ -193,7 +199,15 @@
     },
 
     async saveAnimal(a) {
-      a = { ...a, events: [...(a.events || [])], updated: new Date().toISOString() };
+      const now = new Date().toISOString();
+      const prev = state.animals.get(a.uid);
+      const before = new Map(((prev && prev.events) || []).map((e) => [e.eid, e]));
+      const strip = (e) => JSON.stringify({ ...e, edited: undefined });
+      // each new or changed event gets a time stamp; removed events are remembered as deleted
+      const events = (a.events || []).map((e) => (before.has(e.eid) && strip(before.get(e.eid)) === strip(e) ? e : { ...e, edited: now }));
+      const kept = new Set(events.map((e) => e.eid));
+      for (const eid of before.keys()) if (!kept.has(eid)) state.tombs.e[a.uid + '|' + eid] = now;
+      a = { ...a, events, updated: now };
       state.animals.set(a.uid, a);
       changed();
       notify();
@@ -204,6 +218,7 @@
     },
     async deleteAnimal(uid) {
       state.animals.delete(uid);
+      state.tombs.a[uid] = new Date().toISOString();
       changed();
       notify();
       if (state.backend === 'cloud') {
@@ -232,6 +247,11 @@
       if (settings) state.settings = mergeSettings(settings);
       if (opts.savedAt) state.savedAt = opts.savedAt; // loaded from a backup: not a new change
       else changed();
+      // a fresh herd (import, example, clear) starts a new history; a loaded backup brings its own
+      if (!opts.additive) { // additive: animals added to the herd (CSV import), not a new herd
+        state.tombs = opts.tombs || { a: {}, e: {} };
+        state.replacedAt = opts.replacedAt !== undefined ? opts.replacedAt : opts.savedAt ? '' : new Date().toISOString();
+      }
       if (opts.log) state.log = opts.log;
       notify();
       if (state.backend === 'cloud') {
@@ -257,7 +277,55 @@
       } else saveLocal();
     },
     exportJSON(compact) {
-      return JSON.stringify({ app: 'SwineOS', version: 1, exported: new Date().toISOString(), savedAt: state.savedAt, settings: state.settings, animals: [...state.animals.values()], log: state.log.slice(-1500) }, null, compact ? 0 : 1);
+      return JSON.stringify({ app: 'SwineOS', version: 1, exported: new Date().toISOString(), savedAt: state.savedAt, settings: state.settings, animals: [...state.animals.values()], log: state.log.slice(-1500), tombs: state.tombs, replacedAt: state.replacedAt }, null, compact ? 0 : 1);
+    },
+    /**
+     * Combine a backup made on another computer with the records here, so nothing entered on either is lost.
+     * Animals and events from both are kept; for the same animal or event the most recent change wins;
+     * deletions made on either side stay deleted. If one side replaced the whole herd (PigWIN import,
+     * restore) after the other's last change, that side is taken as it is.
+     * Returns { mode: 'merged' | 'remote' | 'local', fromRemote, fromLocal } (counts of animals that changed).
+     */
+    async mergeBackup(remote) {
+      const L = { savedAt: state.savedAt || '', replacedAt: state.replacedAt || '' };
+      const R = { savedAt: remote.savedAt || '', replacedAt: remote.replacedAt || '' };
+      if (R.replacedAt && R.replacedAt > L.savedAt) {
+        await Store.replaceAll(remote.animals, remote.settings, null, { savedAt: remote.savedAt || new Date().toISOString(), log: remote.log, tombs: remote.tombs, replacedAt: remote.replacedAt });
+        return { mode: 'remote', fromRemote: remote.animals.length, fromLocal: 0 };
+      }
+      if (L.replacedAt && L.replacedAt > R.savedAt) return { mode: 'local', fromRemote: 0, fromLocal: state.animals.size };
+      const tombs = { a: { ...((remote.tombs || {}).a || {}) }, e: { ...((remote.tombs || {}).e || {}) } };
+      for (const k of ['a', 'e']) for (const [id, t] of Object.entries(state.tombs[k] || {})) if (!tombs[k][id] || t > tombs[k][id]) tombs[k][id] = t;
+      const rmap = new Map((remote.animals || []).map((a) => [a.uid, a]));
+      const uids = new Set([...state.animals.keys(), ...rmap.keys()]);
+      const out = []; let fromRemote = 0; let fromLocal = 0;
+      const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+      for (const uid of uids) {
+        const l = state.animals.get(uid); const r = rmap.get(uid);
+        const newest = Math.max(...[l, r].filter(Boolean).map((x) => Date.parse(x.updated || 0) || 0));
+        if (tombs.a[uid] && Date.parse(tombs.a[uid]) >= newest) continue; // deleted after its last change
+        let m;
+        if (!l || !r) m = l || r;
+        else {
+          const base = (l.updated || '') >= (r.updated || '') ? l : r;
+          const evs = new Map();
+          for (const e of [...(l.events || []), ...(r.events || [])]) {
+            const cur = evs.get(e.eid);
+            if (!cur || (e.edited || '') > (cur.edited || '')) evs.set(e.eid, e);
+          }
+          const events = [...evs.values()].filter((e) => { const t = tombs.e[uid + '|' + e.eid]; return !t || t < (e.edited || ''); });
+          m = { ...base, events, updated: (l.updated || '') > (r.updated || '') ? l.updated : r.updated };
+        }
+        if (!l || !same(m, l)) fromRemote++;
+        if (!r || !same(m, r)) fromLocal++;
+        out.push(m);
+      }
+      const settings = R.savedAt > L.savedAt ? remote.settings : state.settings;
+      const seen = new Set(); const log = [...(state.log || []), ...(remote.log || [])].filter((x) => { const k = x.t + x.text; if (seen.has(k)) return false; seen.add(k); return true; }).sort((x, y) => (x.t < y.t ? -1 : 1)).slice(-1500);
+      if (fromRemote || R.savedAt > L.savedAt) {
+        await Store.replaceAll(out, settings, null, { savedAt: R.savedAt > L.savedAt ? R.savedAt : L.savedAt, log, tombs, replacedAt: L.replacedAt > R.replacedAt ? L.replacedAt : R.replacedAt });
+      } else { state.tombs = tombs; saveLocal(); }
+      return { mode: 'merged', fromRemote, fromLocal };
     },
     /** Backup file contents (JSON, optionally gzip-compressed) -> object. */
     async parseBackup(bytes) {

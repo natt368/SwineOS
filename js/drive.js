@@ -389,19 +389,25 @@
         return cfg.lastFile;
       }
       const farm = `${S.store.settings.farmNumber} ${S.store.settings.farmName}`.trim();
-      const props = { swineos: 'main', savedAt: S.store.state.savedAt || '', device: deviceName(), farm: farm.slice(0, 100) };
-      let file;
-      try {
-        if (cfg.mainFileId) file = await upload(bytes, { fileId: cfg.mainFileId, props });
-      } catch (e) { if (e.status !== 404) throw e; }
-      if (!file) {
+      // Never overwrite a backup made on another computer: if Drive changed since this computer last
+      // synced, combine it with the records here first. Checked again after uploading, in case the other
+      // computer backed up at the same moment.
+      let file; let payload = bytes;
+      for (let round = 0; round < 3; round++) {
         const found = (await findBackups('main'))[0];
-        file = await upload(bytes, found ? { fileId: found.id, props } : { name: `SwineOS backup - ${farm}.json.gz`, props });
+        // Drive changed since this computer last synced (or this computer never synced with it): combine first.
+        // An empty or out-of-date computer therefore never overwrites a fuller backup.
+        if (found && found.modifiedTime !== cfg.lastRemote) { await mergeRemote(found); payload = await S.store.gzipBackup(); }
+        const props = { swineos: 'main', savedAt: S.store.state.savedAt || '', device: deviceName(), farm: farm.slice(0, 100) };
+        file = await upload(payload, found ? { fileId: found.id, props } : { name: `SwineOS backup - ${farm}.json.gz`, props });
+        cfg.lastRemote = file.modifiedTime; save();
+        const now = (await findBackups('main'))[0];
+        if (!now || now.modifiedTime === file.modifiedTime) break;
       }
       cfg.mainFileId = file.id; cfg.lastRemote = file.modifiedTime; cfg.lastLocal = S.store.state.savedAt || ''; cfg.lastBackup = new Date().toISOString();
       cfg.lastFile = { name: file.name, url: file.webViewLink || '', size: bytes.length };
       save();
-      await dailyCopy(bytes, farm);
+      await dailyCopy(payload, farm);
       setStatus('ok');
       return cfg.lastFile;
     } catch (e) {
@@ -432,13 +438,14 @@
     }
   }
 
-  async function restoreFile(file, why) {
+  /** deliberate: the user picked an (older) backup to go back to, so it must not be merged away again. */
+  async function restoreFile(file, why, deliberate = false) {
     setStatus('loading');
     if (CONN) {
       const data = await cDownloadSet(file);
       if (!data || !Array.isArray(data.animals)) throw new Error('The file in Google Drive is not a SwineOS backup.');
       ui().toast(`Loading ${data.animals.length} animals from Google Drive…`);
-      await S.store.replaceAll(data.animals, data.settings, null, { savedAt: data.savedAt || file.modifiedTime, log: data.log });
+      await S.store.replaceAll(data.animals, data.settings, null, { savedAt: data.savedAt || file.modifiedTime, log: data.log, tombs: data.tombs, replacedAt: deliberate ? new Date().toISOString() : data.replacedAt });
       S.model.resetCache();
       cfg.lastRemote = file.key; cfg.lastLocal = S.store.state.savedAt || ''; cfg.lastBackup = new Date().toISOString(); save();
       setStatus('ok');
@@ -448,7 +455,7 @@
     }
     const data = await download(file.id);
     if (!data || !Array.isArray(data.animals)) throw new Error('The file in Google Drive is not a SwineOS backup.');
-    await S.store.replaceAll(data.animals, data.settings, null, { savedAt: data.savedAt || file.modifiedTime, log: data.log });
+    await S.store.replaceAll(data.animals, data.settings, null, { savedAt: data.savedAt || file.modifiedTime, log: data.log, tombs: data.tombs, replacedAt: deliberate ? new Date().toISOString() : data.replacedAt });
     S.model.resetCache();
     if ((file.appProperties || {}).swineos === 'main') { cfg.mainFileId = file.id; cfg.lastRemote = file.modifiedTime; }
     cfg.lastLocal = S.store.state.savedAt || ''; cfg.lastBackup = new Date().toISOString(); save();
@@ -456,6 +463,24 @@
     const p = file.appProperties || {};
     ui().toast(`${why || 'Loaded backup from Google Drive'}: ${data.animals.length} animals, saved ${U.fmtDT(p.savedAt || file.modifiedTime)}${p.device ? ' on ' + p.device : ''}.`, 'ok');
     S.app.rerender();
+  }
+
+  /**
+   * Another computer backed up since this one last synced: combine its backup with the records here
+   * (nothing entered on either computer is lost), so the next upload holds both.
+   */
+  async function mergeRemote(remote) {
+    const data = await download(remote.id);
+    if (!data || !Array.isArray(data.animals)) throw new Error('The backup in Google Drive is not a SwineOS backup.');
+    const res = await S.store.mergeBackup(data);
+    S.model.resetCache();
+    cfg.lastRemote = remote.modifiedTime; save();
+    const p = remote.appProperties || {};
+    const from = `the backup saved ${U.fmtDT(p.savedAt || remote.modifiedTime)}${p.device ? ' on ' + p.device : ''}`;
+    if (res.mode === 'remote') ui().toast(`Loaded ${from}: the herd was replaced there (import or restore).`, 'ok');
+    else if (res.mode === 'merged' && res.fromRemote) ui().toast(`Combined with ${from}: ${res.fromRemote} animal${res.fromRemote === 1 ? '' : 's'} with changes from the other computer added. Nothing was lost.`, 'ok');
+    S.app.rerender();
+    return res;
   }
 
   /** Compare the newest Drive backup with this computer's records and bring them in line. */
@@ -482,20 +507,10 @@
       if (opening && !cfg.loadOnOpen) { setStatus('ok'); return; }
       await restoreFile(remote, opening ? 'Loaded the latest backup from Google Drive' : 'Updated from Google Drive');
     } else if (remoteChanged && localChanged) {
-      const p = remote.appProperties || {};
-      setStatus('pending');
-      ui().modal({ title: 'Google Drive', width: 520, body: h('div',
-        h('p', `Google Drive has a newer backup, saved ${U.fmtDT(p.savedAt || remote.modifiedTime)}${p.device ? ' on ' + p.device : ''}.`),
-        h('p', `This computer also has changes from ${U.fmtDT(localSaved)} that are not in that backup.`),
-        h('p', 'Which records do you want to keep? The other version is saved in the same Google Drive folder as a conflict copy, so nothing is lost.')), buttons: [
-        { label: 'Use Google Drive backup', primary: true, onClick: async () => {
-          try { await saveConflictCopy(null); await restoreFile(remote); } catch (e) { ui().alertBox('Google Drive', e.message); }
-        } },
-        { label: "Keep this computer's records", onClick: async () => {
-          try { await saveConflictCopy(remote); } catch (e) { /* the daily copy still exists */ }
-          cfg.lastRemote = remote.modifiedTime; save(); await backupNow();
-        } },
-      ] });
+      // both computers have new records: combine them, then back up the combined herd
+      setStatus('loading');
+      await mergeRemote(remote);
+      await backupNow();
     } else if (localChanged) await backupNow();
     else setStatus('ok');
   }
@@ -586,7 +601,7 @@
           { label: 'Parts', num: true, value: (st) => st.total }, { label: 'Size', num: true, value: (st) => (st.size ? Math.round(st.size / 1024) + ' KB' : '') },
         ], onRowDblClick: async (st) => {
           if (!(await ui().confirmBox('Restore from Google Drive', `Replace all records in SwineOS with the backup saved ${U.fmtDT(st.modifiedTime)}?`, 'Restore'))) return;
-          try { await restoreFile(st, 'Restored from Google Drive'); U.$$('.modal-back').forEach((x) => x.remove()); } catch (e) { ui().alertBox('Google Drive', e.message); }
+          try { await restoreFile(st, 'Restored from Google Drive', true); U.$$('.modal-back').forEach((x) => x.remove()); } catch (e) { ui().alertBox('Google Drive', e.message); }
         } }));
       }).catch((e) => { host.innerHTML = ''; host.appendChild(h('p', 'Could not list backups: ' + e.message)); });
       return;
@@ -600,7 +615,7 @@
         { label: 'Computer', value: (f) => (f.appProperties || {}).device || '' }, { label: 'Size', num: true, value: (f) => (f.size ? Math.round(f.size / 1024) + ' KB' : '') },
       ], onRowDblClick: async (f) => {
         if (!(await ui().confirmBox('Restore from Google Drive', `Replace the records on this computer with "${f.name}"?`, 'Restore'))) return;
-        try { await restoreFile(f, 'Restored from Google Drive'); U.$$('.modal-back').forEach((x) => x.remove()); } catch (e) { ui().alertBox('Google Drive', e.message); }
+        try { await restoreFile(f, 'Restored from Google Drive', true); U.$$('.modal-back').forEach((x) => x.remove()); } catch (e) { ui().alertBox('Google Drive', e.message); }
       } }));
     }).catch((e) => { host.innerHTML = ''; host.appendChild(h('p', 'Could not list backups: ' + e.message)); });
   }

@@ -146,7 +146,7 @@
           const kind = r.AnvAfvCod === 97 ? 'death' : r.AnvAfvCod === 56 ? 'sold' : 'cull';
           const reason = remarkByEvent.get(r.RefGbr);
           if (reason) (kind === 'death' ? lists.deathReasons : lists.cullReasons).add(reason);
-          push({ type: 'remove', date: r.AnvAfvDat, kind, reason });
+          push({ type: 'remove', date: r.AnvAfvDat, kind, reason, _g: r.RefGbr });
         }
       }
       if (!a.entryDate) a.noEntry = true; // no herd entry recorded: not counted in breeding inventory
@@ -154,38 +154,43 @@
       for (const r of mates.get(ref) || []) {
         const tech = r.RelNumIns ? rel.get(r.RelNumIns) : undefined;
         if (tech) lists.technicians.add(tech);
-        push({ type: 'mate', date: r.Dat, boar: r.RefVknDek ? idOf.get(r.RefVknDek) : undefined, method: r.SrtDek === 1 ? 'Natural' : 'AI', tech, _t: r.Tyd || 0 });
+        push({ type: 'mate', date: r.Dat, boar: r.RefVknDek ? idOf.get(r.RefVknDek) : undefined, method: r.SrtDek === 1 ? 'Natural' : 'AI', tech, _t: r.Tyd || 0, _g: r.RefGbr });
       }
-      for (const r of pregs.get(ref) || []) push({ type: 'preg', date: r.Dat, result: '-', method: r.TstMth === 1 ? 'Not farrowed' : 'Not pregnant' });
+      for (const r of pregs.get(ref) || []) push({ type: 'preg', date: r.Dat, result: '-', method: r.TstMth === 1 ? 'Not farrowed' : 'Not pregnant', _g: r.RefGbr });
       for (const r of farrows.get(ref) || []) {
         const lb = r.LevGebTot || 0;
         const note = remarkByEvent.get(r.RefGbr);
         push({ type: 'farrow', date: r.Dat, liveBorn: lb, stillborn: (r.DodGebVolTot || 0) + (r.DodGebOnvTot || 0), mummies: r.Mum || 0,
           birthWeight: r.GemGebGew ? Math.round(r.GemGebGew * lb * 10) / 10 : undefined, induced: note === 'Induced' ? true : undefined,
-          remarks: note && note !== 'Induced' ? note : undefined });
+          remarks: note && note !== 'Induced' ? note : undefined, _g: r.RefGbr });
       }
       for (const r of deaths.get(ref) || []) {
         const cause = remarkByEvent.get(r.RefGbr) || 'Unknown';
         lists.pigDeathCauses.add(cause);
-        push({ type: 'pigdeath', date: r.Dat, count: r.UtvTot || 1, cause });
+        push({ type: 'pigdeath', date: r.Dat, count: r.UtvTot || 1, cause, _g: r.RefGbr });
       }
       for (const r of fosters.get(ref) || []) {
         const n = (r.OvrTot || 0) * (r.OvrCod < 0 ? -1 : 1);
-        if (n) push({ type: 'foster', date: r.Dat, count: n, otherSow: r.RefVknOvr ? idOf.get(r.RefVknOvr) : undefined });
+        if (n) push({ type: 'foster', date: r.Dat, count: n, otherSow: r.RefVknOvr ? idOf.get(r.RefVknOvr) : undefined, _g: r.RefGbr });
       }
       for (const r of weans.get(ref) || []) {
         const n = r.SpnAnt || 0;
-        push({ type: r.SrtVld === 0 && !r.LtsSpnDat_jn ? 'partwean' : 'wean', date: r.Dat, count: n, weight: r.GemSpnGew ? Math.round(r.GemSpnGew * n * 10) / 10 : undefined });
+        push({ type: r.SrtVld === 0 && !r.LtsSpnDat_jn ? 'partwean' : 'wean', date: r.Dat, count: n, weight: r.GemSpnGew ? Math.round(r.GemSpnGew * n * 10) / 10 : undefined, _g: r.RefGbr });
       }
       for (const r of conds.get(ref) || []) push({ type: 'condition', date: r.Dat, score: r.CndScr || undefined, backfat: r.SpkDkt || undefined });
       for (const r of renum.get(ref) || []) push({ type: 'editid', date: (r.DatTyd || '').slice(0, 10), oldId: r.OudVknNum, newId: r.NewVknNum });
       const rem = (comments.get(ref) || []).map((c) => c.Oms).filter((x) => x && !/missing in source farm/i.test(x));
       if (rem.length) a.remarks = [...new Set(rem)].join('; ');
       ev.sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : (ORDER[x.type] - ORDER[y.type]) || ((x._t || 0) - (y._t || 0))));
-      let seq = 0;
+      // event ids stay the same in every PigWIN backup: PigWIN's own event number, else type + date
+      // (so backups from two computers, or a later PigWIN backup, can be combined without mixing events up)
+      let seq = 0; const used = new Set();
       a.events = ev.map((e) => {
-        const out = { eid: 'e' + (seq).toString(36), seq: seq++ };
-        for (const [k, v] of Object.entries(e)) if (v !== undefined && v !== null && k !== '_t') out[k] = v;
+        let eid = e._g ? 'g' + e._g : `x${e.type}${e.date.replace(/-/g, '')}`;
+        for (let n = 2; used.has(eid); n++) eid = eid.replace(/~\d+$/, '') + '~' + n;
+        used.add(eid);
+        const out = { eid, seq: seq++ };
+        for (const [k, v] of Object.entries(e)) if (v !== undefined && v !== null && k !== '_t' && k !== '_g') out[k] = v;
         return out;
       });
       nEvents += a.events.length;
