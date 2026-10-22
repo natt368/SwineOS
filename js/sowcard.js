@@ -139,7 +139,7 @@
 
     const head = h('div.pw-top',
       h('div.pw-id', data && a ? a.id : ''),
-      h('div.pw-farm', h('div', `${S.store.settings.farmNumber || ''} ${S.store.settings.farmName || ''}`.trim()), h('div', `${now.toLocaleDateString('en-US')} ${now.toLocaleTimeString('en-US')}`)),
+      h('div.pw-farm', h('div', `${S.store.settings.farmNumber || ''} ${S.store.settings.farmName || ''}`.trim()), h('div', U.fmtDT(now))),
       h('div.pw-logo', { html: PIG_SVG + 'SwineOS' }));
 
     const farrow = T([
@@ -303,7 +303,7 @@
       const gestL = S.store.settings.gestationLength;
       st.selected.map((u) => S.store.get(u)).filter(Boolean).forEach((a) => {
         const r = A(a);
-        const label = st.filter === 'due' && r.lastService ? `${a.id}   due ${U.fmt(U.addDays(r.lastService.date, gestL)).replace(/\/\d{4}$/, '')}` : a.id;
+        const label = st.filter === 'due' && r.lastService ? `${a.id}   due ${U.fmt(U.addDays(r.lastService.date, gestL)).slice(0, 6)}` : a.id;
         chosen.appendChild(h('option', { value: a.uid, selected: st.current && st.current.uid === a.uid ? 'selected' : null }, label));
       });
       availHead.textContent = `Available ${avail.options.length}`;

@@ -23,7 +23,7 @@
     if (s < 60) return 'just now';
     if (s < 3600) return Math.round(s / 60) + ' min ago';
     if (s < 86400) return Math.round(s / 3600) + ' h ago';
-    return new Date(iso).toLocaleDateString();
+    return U.fmtDT(iso).split(' ')[0];
   }
   function lastDownload() { try { return localStorage.getItem(DL_KEY) || ''; } catch (e) { return ''; } }
 
@@ -76,12 +76,12 @@
     const body = h('div.safe-detail',
       h('div.safe-head', h('span.safe-big', { html: icon(c.st) }), h('div', h('div.safe-title', c.label), h('div', c.detail))),
       row('Records saved', cloud ? 'Shared online database' : 'This browser on this computer'),
-      row('Last saved', ss.lastSaved ? new Date(ss.lastSaved).toLocaleString() : (S.store.state.savedAt ? new Date(S.store.state.savedAt).toLocaleString() : '')),
+      row('Last saved', ss.lastSaved ? U.fmtDT(ss.lastSaved) : (S.store.state.savedAt ? U.fmtDT(S.store.state.savedAt) : '')),
       row('Google Drive folder', dc ? d.folderLabel() : (d && d.available() ? 'Not connected' : 'Not available here')),
       !dc ? null : row('Google account', d.config.email || (d.connector ? 'Claude Google Drive connection' : '')),
-      !dc ? null : row('Last backup to Google Drive', d.config.lastBackup ? new Date(d.config.lastBackup).toLocaleString() : 'not yet'),
+      !dc ? null : row('Last backup to Google Drive', d.config.lastBackup ? U.fmtDT(d.config.lastBackup) : 'not yet'),
       !dc || !d.config.lastFile ? null : row('Last backup file', d.config.lastFile.name),
-      cloud ? null : row('Last backup file downloaded', lastDownload() ? new Date(lastDownload()).toLocaleString() : 'never'),
+      cloud ? null : row('Last backup file downloaded', lastDownload() ? U.fmtDT(lastDownload()) : 'never'),
       row('Animals on file', String(S.store.animals().length)));
     const buttons = [];
     if (dc) buttons.push({ label: 'Back up now', primary: true, onClick: () => { if (!d.connector && d.status.state === 'connect') d.reconnect(); else d.backupNowDialog(); } });

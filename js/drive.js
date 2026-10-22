@@ -41,7 +41,7 @@
     statusListeners.forEach((fn) => { try { fn(status); } catch (e) { /* ignore */ } });
   }
   function statusText() {
-    const t = cfg.lastBackup ? new Date(cfg.lastBackup).toLocaleString([], { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+    const t = cfg.lastBackup ? U.fmtDT(cfg.lastBackup) : '';
     switch (status.state) {
       case 'ok': return `Google Drive "${cfg.folderName}": backed up` + (t ? ' ' + t : '');
       case 'pending': return 'Google Drive: changes waiting to back up';
@@ -322,7 +322,7 @@
     ui().modal({ title: 'Choose the farm backup', width: 620, body: h('div', h('p', 'SwineOS backups were found in these Google Drive folders. Pick the one to use on this computer:'),
       ui().grid({ rows: found, columns: [
         { label: 'Folder', value: (f) => f.path }, { label: 'Farm', value: (f) => (f.file.appProperties || {}).farm || '' },
-        { label: 'Last saved', value: (f) => new Date((f.file.appProperties || {}).savedAt || f.file.modifiedTime).toLocaleString() },
+        { label: 'Last saved', value: (f) => U.fmtDT((f.file.appProperties || {}).savedAt || f.file.modifiedTime) },
       ], onRowDblClick: (f) => { U.$$('.modal-back').pop().remove(); useFolder(f); } }), h('p.hint', 'Double-click a folder to use it.')), buttons: [{ label: 'Cancel' }] });
   }
   async function listFolders(parent) {
@@ -442,7 +442,7 @@
       S.model.resetCache();
       cfg.lastRemote = file.key; cfg.lastLocal = S.store.state.savedAt || ''; cfg.lastBackup = new Date().toISOString(); save();
       setStatus('ok');
-      ui().toast(`${why || 'Loaded backup from Google Drive'}: ${data.animals.length} animals, saved ${new Date(data.savedAt || file.modifiedTime).toLocaleString()}.`, 'ok');
+      ui().toast(`${why || 'Loaded backup from Google Drive'}: ${data.animals.length} animals, saved ${U.fmtDT(data.savedAt || file.modifiedTime)}.`, 'ok');
       S.app.rerender();
       return;
     }
@@ -454,7 +454,7 @@
     cfg.lastLocal = S.store.state.savedAt || ''; cfg.lastBackup = new Date().toISOString(); save();
     setStatus('ok');
     const p = file.appProperties || {};
-    ui().toast(`${why || 'Loaded backup from Google Drive'}: ${data.animals.length} animals, saved ${new Date(p.savedAt || file.modifiedTime).toLocaleString()}${p.device ? ' on ' + p.device : ''}.`, 'ok');
+    ui().toast(`${why || 'Loaded backup from Google Drive'}: ${data.animals.length} animals, saved ${U.fmtDT(p.savedAt || file.modifiedTime)}${p.device ? ' on ' + p.device : ''}.`, 'ok');
     S.app.rerender();
   }
 
@@ -485,8 +485,8 @@
       const p = remote.appProperties || {};
       setStatus('pending');
       ui().modal({ title: 'Google Drive', width: 520, body: h('div',
-        h('p', `Google Drive has a newer backup, saved ${new Date(p.savedAt || remote.modifiedTime).toLocaleString()}${p.device ? ' on ' + p.device : ''}.`),
-        h('p', `This computer also has changes from ${new Date(localSaved).toLocaleString()} that are not in that backup.`),
+        h('p', `Google Drive has a newer backup, saved ${U.fmtDT(p.savedAt || remote.modifiedTime)}${p.device ? ' on ' + p.device : ''}.`),
+        h('p', `This computer also has changes from ${U.fmtDT(localSaved)} that are not in that backup.`),
         h('p', 'Which records do you want to keep? The other version is saved in the same Google Drive folder as a conflict copy, so nothing is lost.')), buttons: [
         { label: 'Use Google Drive backup', primary: true, onClick: async () => {
           try { await saveConflictCopy(null); await restoreFile(remote); } catch (e) { ui().alertBox('Google Drive', e.message); }
@@ -582,10 +582,10 @@
         if (!sets.length) { host.appendChild(h('p', 'No SwineOS backups in this folder yet.')); return; }
         host.appendChild(h('p.hint', 'Double-click a backup to load it. It replaces all records in SwineOS.'));
         host.appendChild(ui().grid({ rows: sets, columns: [
-          { label: 'Backup', value: (st) => st.name + (st.complete ? '' : ' (incomplete)') }, { label: 'Saved', value: (st) => new Date(st.modifiedTime).toLocaleString(), sort: (st) => st.modifiedTime },
+          { label: 'Backup', value: (st) => st.name + (st.complete ? '' : ' (incomplete)') }, { label: 'Saved', value: (st) => U.fmtDT(st.modifiedTime), sort: (st) => st.modifiedTime },
           { label: 'Parts', num: true, value: (st) => st.total }, { label: 'Size', num: true, value: (st) => (st.size ? Math.round(st.size / 1024) + ' KB' : '') },
         ], onRowDblClick: async (st) => {
-          if (!(await ui().confirmBox('Restore from Google Drive', `Replace all records in SwineOS with the backup saved ${new Date(st.modifiedTime).toLocaleString()}?`, 'Restore'))) return;
+          if (!(await ui().confirmBox('Restore from Google Drive', `Replace all records in SwineOS with the backup saved ${U.fmtDT(st.modifiedTime)}?`, 'Restore'))) return;
           try { await restoreFile(st, 'Restored from Google Drive'); U.$$('.modal-back').forEach((x) => x.remove()); } catch (e) { ui().alertBox('Google Drive', e.message); }
         } }));
       }).catch((e) => { host.innerHTML = ''; host.appendChild(h('p', 'Could not list backups: ' + e.message)); });
@@ -596,7 +596,7 @@
       if (!fs.length) { host.appendChild(h('p', 'No SwineOS backups in this folder yet.')); return; }
       host.appendChild(h('p.hint', 'Double-click a backup to load it. It replaces the records on this computer.'));
       host.appendChild(ui().grid({ rows: fs, columns: [
-        { label: 'File', value: (f) => f.name }, { label: 'Saved', value: (f) => new Date((f.appProperties || {}).savedAt || f.modifiedTime).toLocaleString(), sort: (f) => f.modifiedTime },
+        { label: 'File', value: (f) => f.name }, { label: 'Saved', value: (f) => U.fmtDT((f.appProperties || {}).savedAt || f.modifiedTime), sort: (f) => f.modifiedTime },
         { label: 'Computer', value: (f) => (f.appProperties || {}).device || '' }, { label: 'Size', num: true, value: (f) => (f.size ? Math.round(f.size / 1024) + ' KB' : '') },
       ], onRowDblClick: async (f) => {
         if (!(await ui().confirmBox('Restore from Google Drive', `Replace the records on this computer with "${f.name}"?`, 'Restore'))) return;
@@ -669,8 +669,8 @@
           h('span', 'Connected folder: ', cfg.folderId ? h('a.gd-folder', { href: 'https://drive.google.com/drive/folders/' + cfg.folderId, target: '_blank', rel: 'noopener' }, cfg.folderPath || cfg.folderName) : h('b.gd-folder', 'none chosen')),
           chooseBtn),
         h('div.gd-row2', h('span', 'Last backup: ', cfg.lastFile && cfg.lastFile.name
-          ? [cfg.lastFile.url ? h('a', { href: cfg.lastFile.url, target: '_blank', rel: 'noopener' }, cfg.lastFile.name) : h('b', cfg.lastFile.name), cfg.lastBackup ? ' · ' + new Date(cfg.lastBackup).toLocaleString() : '']
-          : h('b', cfg.lastBackup ? new Date(cfg.lastBackup).toLocaleString() : 'none yet'))),
+          ? [cfg.lastFile.url ? h('a', { href: cfg.lastFile.url, target: '_blank', rel: 'noopener' }, cfg.lastFile.name) : h('b', cfg.lastFile.name), cfg.lastBackup ? ' · ' + U.fmtDT(cfg.lastBackup) : '']
+          : h('b', cfg.lastBackup ? U.fmtDT(cfg.lastBackup) : 'none yet'))),
         h('label.blk', h('input', { type: 'checkbox', checked: cfg.auto, onchange: (e) => { cfg.auto = e.target.checked; save(); } }), ' Back up automatically after changes'),
         CONN ? null : h('label.blk', h('input', { type: 'checkbox', checked: cfg.loadOnOpen, onchange: (e) => { cfg.loadOnOpen = e.target.checked; save(); } }), ' Load the latest backup from Google Drive when SwineOS opens'),
         ui().field('Daily copies to keep', h('input', { type: 'number', min: 1, max: 365, value: cfg.keepDaily, style: { width: '80px' }, onchange: (e) => { cfg.keepDaily = Math.max(1, +e.target.value || 14); save(); } }), CONN ? 'The newest backup is always kept, plus the last backup of each earlier day for this many days. Older ones go to the Google Drive trash. Use Restore from Google Drive to go back to an earlier day.' : 'Besides the main backup, one dated copy is saved per day. Older copies are deleted. Use Restore from Google Drive to go back to an earlier day.'),

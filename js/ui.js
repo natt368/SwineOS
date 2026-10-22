@@ -74,18 +74,18 @@
       }
     };
     /** Fields the cursor can go to, in screen order. */
-    const fields = () => [...content.querySelectorAll('input:not([type=hidden]):not([disabled]):not([readonly]),select:not([disabled]),textarea:not([disabled])')].filter((f) => f.offsetParent !== null);
+    const fields = () => [...content.querySelectorAll('input:not([type=hidden]):not([disabled]):not([readonly]):not(.dt-native),select:not([disabled]),textarea:not([disabled])')].filter((f) => f.offsetParent !== null);
     // text already in a field is highlighted, so typing replaces it (dates are left alone: they are changed by hand)
     content.addEventListener('focusin', (e) => {
       const f = e.target;
       selectAll(f); setTimeout(() => { if (document.activeElement === f) selectAll(f); }, 0);
     });
-    function selectAll(f) { if (f.tagName === 'INPUT' && !['date', 'checkbox', 'radio', 'file', 'button'].includes(f.type)) try { f.select(); } catch (err) { /* not selectable */ } }
+    function selectAll(f) { if (f.tagName === 'INPUT' && !f.classList.contains('dt') && !['date', 'checkbox', 'radio', 'file', 'button'].includes(f.type)) try { f.select(); } catch (err) { /* not selectable */ } }
     // attach after the current event finishes, so the Enter that opened the dialog does not submit it
     setTimeout(() => { if (back.isConnected) document.addEventListener('keydown', key); }, 0);
     setTimeout(() => {
       const fs = fields();
-      const f = fs.find((x) => x.type !== 'date') || fs[0];
+      const f = fs.find((x) => x.type !== 'date' && !x.classList.contains('dt')) || fs[0];
       if (f) f.focus();
     }, 30);
     return { close, box, content };
@@ -345,7 +345,52 @@
     }));
   }
   function input(id, value, attrs = {}) { return h('input', { id, value: value ?? '', ...attrs }); }
-  function dateInput(id, value, attrs = {}) { return h('input', { id, type: 'date', value: value || '', ...attrs }); }
+  /**
+   * Date box showing "Feb/19/26" (the browser's own date box can only show month numbers).
+   * Type a date (Feb 19, 2/19/26, feb/19/2026 …) or use the calendar button. Up / Down change it by a day.
+   * .value reads and sets an ISO date (YYYY-MM-DD) like a normal date input, so code using it does not change.
+   */
+  const NATIVE = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+  function dateInput(id, value, attrs = {}) {
+    const { max, min, ...rest } = attrs;
+    const text = h('input.dt', { id, type: 'text', autocomplete: 'off', spellcheck: 'false', placeholder: 'Mmm/DD/YY', 'aria-label': rest['aria-label'] || 'Date', ...rest });
+    const pick = h('input.dt-native', { type: 'date', tabindex: -1, 'aria-hidden': 'true', max: max || null, min: min || null });
+    const btn = h('button.dt-btn', { type: 'button', tabindex: -1, title: 'Pick a date', 'aria-label': 'Pick a date', html: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="12" rx="1.5" fill="none" stroke="currentColor"/><path d="M1.5 6h13M5 1v3M11 1v3" stroke="currentColor"/></svg>' });
+    const wrap = h('span.dt-wrap', text, btn, pick);
+    let iso = '';
+    const raw = () => NATIVE.get.call(text);
+    const check = (v) => { const bad = !!v && (!!(max && v > max) || !!(min && v < min)); text.classList.toggle('bad', bad); text.title = bad ? (max && v > max ? `Latest allowed: ${U.fmt(max)}` : `Earliest allowed: ${U.fmt(min)}`) : ''; };
+    const put = (v) => { iso = v || ''; NATIVE.set.call(text, U.fmt(iso)); pick.value = iso; check(iso); };
+    Object.defineProperty(text, 'value', {
+      configurable: true,
+      // while typing, the text is read as a date as soon as it makes one
+      // text that is not a date reads as no date (so Save asks for one instead of keeping an old date)
+      get: () => { const t = raw(); if (!t.trim()) return ''; return U.parseDate(t) || ''; },
+      set: (v) => put(v),
+    });
+    const fire = (type) => text.dispatchEvent(new Event(type, { bubbles: true }));
+    text.addEventListener('change', () => {
+      const t = raw();
+      if (!t.trim()) { iso = ''; pick.value = ''; text.classList.remove('bad'); return; }
+      const p = U.parseDate(t);
+      if (p) put(p); else { text.classList.add('bad'); text.title = 'Not a date – type it like Feb/19/26'; }
+    }, true);
+    text.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault();
+      const base = text.value || U.today();
+      put(U.addDays(base, e.key === 'ArrowUp' ? 1 : -1)); fire('input'); fire('change');
+    });
+    btn.addEventListener('click', () => { pick.value = text.value || U.today(); try { pick.showPicker(); } catch (e) { pick.focus(); pick.click(); } });
+    pick.addEventListener('change', () => { if (!pick.value) return; put(pick.value); fire('input'); fire('change'); text.focus(); });
+    put(value || '');
+    // the wrapper behaves like the input for code that holds on to it
+    Object.defineProperty(wrap, 'value', { get: () => text.value, set: (v) => { text.value = v; } });
+    wrap.input = text;
+    wrap.focus = (o) => text.focus(o);
+    wrap.dispatchEvent = (ev) => EventTarget.prototype.dispatchEvent.call(text, new Event(ev.type, { bubbles: true }));
+    return wrap;
+  }
 
   S.ui = { icon, ICONS, toast, modal, confirmBox, alertBox, appWindow, grid, contextMenu, lineChart, scatter, saveFile, printPreview, field, select, input, dateInput };
 })(window.SOS);

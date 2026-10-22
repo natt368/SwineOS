@@ -31,11 +31,37 @@ window.SOS = window.SOS || {};
       dt.setUTCDate(Math.min(d, last));
       return dt.toISOString().slice(0, 10);
     },
-    /** ISO -> M/D/YYYY like PigWIN. */
+    MONTHS: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    /** ISO -> "Feb/19/26": the month as letters so nobody has to decode month numbers. */
     fmt(iso) {
       if (!iso) return '';
-      const [y, m, d] = iso.split('-').map(Number);
-      return `${m}/${d}/${y}`;
+      const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+      if (!y || !m || !d) return '';
+      return `${U.MONTHS[m - 1]}/${String(d).padStart(2, '0')}/${String(y % 100).padStart(2, '0')}`;
+    },
+    /** Date and time (a timestamp, Date or ISO string) -> "Feb/19/26 2:05 PM", in this computer's time zone. */
+    fmtDT(t) {
+      if (t === undefined || t === null || t === '') return '';
+      const dt = t instanceof Date ? t : new Date(t);
+      if (isNaN(dt)) return '';
+      const iso = [dt.getFullYear(), String(dt.getMonth() + 1).padStart(2, '0'), String(dt.getDate()).padStart(2, '0')].join('-');
+      return `${U.fmt(iso)} ${dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+    },
+    /** Typed date -> ISO, or null. Takes Feb/19/26, feb 19 2026, 2/19/26, 2/19/2026, 2026-02-19, 19-Feb-26. */
+    parseDate(text) {
+      const t = String(text || '').trim().toLowerCase();
+      if (!t) return null;
+      let y; let m; let d;
+      let x = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (x) [, y, m, d] = x.map(Number);
+      else if ((x = t.match(/^([a-z]{3,9})[\s/.,-]+(\d{1,2})(?:[\s/.,-]+(\d{2,4}))?$/))) { m = U.MONTHS.findIndex((n) => x[1].startsWith(n.toLowerCase())) + 1; d = +x[2]; y = x[3] ? +x[3] : new Date().getFullYear(); }
+      else if ((x = t.match(/^(\d{1,2})[\s/.,-]+([a-z]{3,9})(?:[\s/.,-]+(\d{2,4}))?$/))) { m = U.MONTHS.findIndex((n) => x[2].startsWith(n.toLowerCase())) + 1; d = +x[1]; y = x[3] ? +x[3] : new Date().getFullYear(); }
+      else if ((x = t.match(/^(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?$/))) { m = +x[1]; d = +x[2]; y = x[3] ? +x[3] : new Date().getFullYear(); }
+      else return null;
+      if (y < 100) y += 2000;
+      if (!(m >= 1 && m <= 12) || !(d >= 1 && d <= 31)) return null;
+      const iso = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      return U.n2d(U.d2n(iso)) === iso ? iso : null; // rejects 2/30 and the like
     },
     weekday(iso) {
       return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(U.d2n(iso) * DAY).getUTCDay()];

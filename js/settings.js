@@ -138,7 +138,7 @@
     let data;
     try { data = await S.store.parseBackup(await file.arrayBuffer()); } catch (e) { ui().alertBox('Restore failed', 'This file is not a SwineOS backup (it is not valid JSON).'); return; }
     if (!data || !Array.isArray(data.animals)) { ui().alertBox('Restore failed', 'This file is not a SwineOS backup (no animals found).'); return; }
-    const ok = await ui().confirmBox('Restore backup', `Replace all current records with the backup from ${data.exported ? new Date(data.exported).toLocaleString() : 'this file'} (${data.animals.length} animals)?`, 'Replace records');
+    const ok = await ui().confirmBox('Restore backup', `Replace all current records with the backup from ${data.exported ? U.fmtDT(data.exported) : 'this file'} (${data.animals.length} animals)?`, 'Replace records');
     if (!ok) return;
     await S.store.replaceAll(data.animals, data.settings, progress(prog), { log: data.log });
     S.model.resetCache();

@@ -728,7 +728,7 @@
   function logReport() {
     return reportWindow({ title: 'Log', subtitle: 'Recent changes to the records', noDates: true, build: () => {
       const rows = [...S.store.state.log].reverse();
-      const g = ui().grid({ rows, cls: 'rep-grid', columns: [{ label: 'Time', value: (x) => new Date(x.t).toLocaleString() }, { label: 'Change', value: (x) => x.text }], emptyText: 'No changes logged yet' });
+      const g = ui().grid({ rows, cls: 'rep-grid', columns: [{ label: 'Time', value: (x) => U.fmtDT(x.t) }, { label: 'Change', value: (x) => x.text }], emptyText: 'No changes logged yet' });
       return { node: g, csv: [['Time', 'Change'], ...rows.map((x) => [x.t, x.text])] };
     } });
   }
