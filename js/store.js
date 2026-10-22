@@ -3,6 +3,7 @@
  *  - Shared cloud database (when the app runs as a claude.ai Artifact with the db capability)
  *  - The browser's localStorage (any other host, e.g. GitHub Pages / local file)
  * Every animal is one record holding its own event history.
+ * Finance records (expenses, income, barn parts) are kept beside the herd and go into the same backups.
  */
 (function (S) {
   'use strict';
@@ -13,12 +14,13 @@
     savedAt: '', // when the herd records last changed (ISO time)
     settings: null,
     animals: new Map(), // uid -> animal
+    fin: new Map(), // id -> finance record (expense, income or barn part)
     log: [],
     backend: 'local',
     ready: false,
     // for merging backups made on two computers: when animals / events were deleted,
-    // and when the whole herd was last replaced (PigWIN import, restore, example herd, clear)
-    tombs: { a: {}, e: {} },
+    // and when the whole herd was last replaced (PigWIN import, restore, example herd, clear); f: finance records
+    tombs: { a: {}, e: {}, f: {} },
     replacedAt: '',
   };
   const listeners = new Set();
@@ -33,6 +35,7 @@
   }
   let db = null;
   let bulk = false; // ignore partial snapshots while a whole-herd write is in flight
+  let finBulk = false; // the same for a large finance import
   let notifyQueued = false;
 
   function notify() {
@@ -89,12 +92,13 @@
     ((raw && raw.animals) || []).forEach((a) => state.animals.set(a.uid, a));
     state.log = (raw && raw.log) || [];
     state.savedAt = (raw && raw.savedAt) || '';
-    state.tombs = (raw && raw.tombs) || { a: {}, e: {} };
+    state.tombs = { f: {}, ...((raw && raw.tombs) || { a: {}, e: {} }) };
     state.replacedAt = (raw && raw.replacedAt) || '';
+    state.fin = new Map(((raw && raw.fin) || []).map((r) => [r.id, r]));
   }
   function saveLocal() { saveState.localPending = true; saveNotify(); saveLocalNow(); }
   const saveLocalNow = U.debounce(async () => {
-    const data = { savedAt: state.savedAt, settings: state.settings, animals: [...state.animals.values()], log: state.log.slice(-2000), tombs: state.tombs, replacedAt: state.replacedAt };
+    const data = { savedAt: state.savedAt, settings: state.settings, animals: [...state.animals.values()], fin: [...state.fin.values()], log: state.log.slice(-2000), tombs: state.tombs, replacedAt: state.replacedAt };
     try {
       await idbPut(LS_KEY, data);
       try { localStorage.removeItem(LS_KEY); } catch (e) { /* ignore */ }
@@ -152,8 +156,8 @@
     state.backend = 'cloud';
     let first = true;
     await new Promise((resolve) => {
-      let gotA = false; let gotS = false;
-      const check = () => { if (gotA && gotS && first) { first = false; resolve(); } };
+      let gotA = false; let gotS = false; let gotF = false;
+      const check = () => { if (gotA && gotS && gotF && first) { first = false; resolve(); } };
       db.collection('animals').onSnapshot((snap) => {
         if (bulk && gotA) return;
         const m = new Map();
@@ -161,6 +165,13 @@
         state.animals = m;
         gotA = true; check(); notify();
       }, (e) => { console.warn(e); gotA = true; check(); });
+      db.collection('finance').onSnapshot((snap) => {
+        if ((bulk || finBulk) && gotF) return;
+        const m = new Map();
+        snap.docs.forEach((d) => { const r = d.data(); if (r && r.id) m.set(r.id, r); });
+        state.fin = m;
+        gotF = true; check(); notify();
+      }, (e) => { console.warn(e); gotF = true; check(); });
       db.doc('meta/settings').onSnapshot((snap) => {
         state.settings = mergeSettings(snap.exists ? snap.data() : null);
         gotS = true; check(); notify();
@@ -169,6 +180,26 @@
     });
     db.doc('meta/log').onSnapshot((snap) => { state.log = (snap.exists && snap.data().entries) || []; });
     return true;
+  }
+
+  async function writeFin(recs, removeIds) {
+    await pool(removeIds, (id) => withRetry(() => db.collection('finance').doc(id).delete()), 4);
+    await pool(recs, (r) => withRetry(() => db.collection('finance').doc(r.id).set(JSON.parse(JSON.stringify(r)))), 4);
+  }
+  /** Finance records of this computer and a backup combined: newest change of each record wins, deletions stay deleted. */
+  function mergeFin(remote) {
+    const tombs = { ...(((remote.tombs || {}).f) || {}) };
+    for (const [id, t] of Object.entries(state.tombs.f || {})) if (!tombs[id] || t > tombs[id]) tombs[id] = t;
+    const rmap = new Map((remote.fin || []).map((r) => [r.id, r]));
+    const list = []; let fromRemote = 0;
+    for (const id of new Set([...state.fin.keys(), ...rmap.keys()])) {
+      const l = state.fin.get(id); const r = rmap.get(id);
+      const m = !l ? r : !r ? l : (r.updated || '') > (l.updated || '') ? r : l;
+      if (tombs[id] && tombs[id] >= (m.updated || '')) { if (l) fromRemote++; continue; }
+      if (m !== l) fromRemote++;
+      list.push(m);
+    }
+    return { list, tombs, fromRemote };
   }
 
   /* ---------------- public API ---------------- */
@@ -248,8 +279,12 @@
       if (opts.savedAt) state.savedAt = opts.savedAt; // loaded from a backup: not a new change
       else changed();
       // a fresh herd (import, example, clear) starts a new history; a loaded backup brings its own
+      // finance records are only replaced when the backup brings them (a PigWIN import or a new herd keeps them)
+      const fin = Array.isArray(opts.fin) ? opts.fin : null;
+      const oldFin = fin ? [...state.fin.keys()] : [];
+      if (fin) state.fin = new Map(fin.map((r) => [r.id, r]));
       if (!opts.additive) { // additive: animals added to the herd (CSV import), not a new herd
-        state.tombs = opts.tombs || { a: {}, e: {} };
+        state.tombs = { ...(opts.tombs || { a: {}, e: {} }), f: fin ? { ...((opts.tombs || {}).f || {}) } : state.tombs.f || {} };
         state.replacedAt = opts.replacedAt !== undefined ? opts.replacedAt : opts.savedAt ? '' : new Date().toISOString();
       }
       if (opts.log) state.log = opts.log;
@@ -265,6 +300,7 @@
           base = dels.length;
           await pool(animals, (a) => withRetry(() => db.collection('animals').doc(a.uid).set(a)), animals.length > 2000 ? 8 : 4, (d) => onProgress && onProgress(base + d, total));
           if (settings) await withRetry(() => db.doc('meta/settings').set(JSON.parse(JSON.stringify(state.settings))));
+          if (fin) await writeFin(fin, oldFin);
         } catch (e) { cloudError(e); }
         bulk = false;
         try { // resync with what the server now holds
@@ -272,12 +308,46 @@
           const m = new Map();
           snap.docs.forEach((d) => { const a = d.data(); if (a && a.uid) m.set(a.uid, a); });
           state.animals = m;
+          if (fin) {
+            const fs = await db.collection('finance').get();
+            state.fin = new Map(fs.docs.map((d) => d.data()).filter((r) => r && r.id).map((r) => [r.id, r]));
+          }
           notify();
         } catch (e) { /* the live listener will catch up */ }
       } else saveLocal();
     },
+    /* ---------- finance records ---------- */
+    fin() { return [...state.fin.values()]; },
+    getFin(id) { return state.fin.get(id); },
+    /** Any herd or finance records on file (an empty copy of SwineOS loads a backup instead of making one). */
+    hasRecords() { return state.animals.size > 0 || state.fin.size > 0; },
+    async saveFin(rec) { return (await Store.putFin([rec]))[0]; },
+    async deleteFin(id) { return Store.putFin([], [id]); },
+    /** Add or change finance records and delete others in one go (one save, one backup). */
+    async putFin(recs, removeIds = []) {
+      const now = new Date().toISOString();
+      const out = recs.map((r) => ({ ...r, id: r.id || U.uid('f'), updated: now }));
+      out.forEach((r) => { state.fin.set(r.id, r); delete state.tombs.f[r.id]; });
+      const dels = removeIds.filter((id) => state.fin.has(id) && !out.some((r) => r.id === id));
+      dels.forEach((id) => { state.fin.delete(id); state.tombs.f[id] = now; });
+      changed();
+      notify();
+      if (state.backend === 'cloud') {
+        finBulk = out.length + dels.length > 20;
+        try { await writeFin(out, dels); } catch (e) { cloudError(e); }
+        if (finBulk) {
+          finBulk = false;
+          try { // resync with what the server now holds
+            const fs = await db.collection('finance').get();
+            state.fin = new Map(fs.docs.map((d) => d.data()).filter((r) => r && r.id).map((r) => [r.id, r]));
+            notify();
+          } catch (e) { /* the live listener will catch up */ }
+        }
+      } else saveLocal();
+      return out;
+    },
     exportJSON(compact) {
-      return JSON.stringify({ app: 'SwineOS', version: 1, exported: new Date().toISOString(), savedAt: state.savedAt, settings: state.settings, animals: [...state.animals.values()], log: state.log.slice(-1500), tombs: state.tombs, replacedAt: state.replacedAt }, null, compact ? 0 : 1);
+      return JSON.stringify({ app: 'SwineOS', version: 1, exported: new Date().toISOString(), savedAt: state.savedAt, settings: state.settings, animals: [...state.animals.values()], fin: [...state.fin.values()], log: state.log.slice(-1500), tombs: state.tombs, replacedAt: state.replacedAt }, null, compact ? 0 : 1);
     },
     /**
      * Combine a backup made on another computer with the records here, so nothing entered on either is lost.
@@ -289,12 +359,18 @@
     async mergeBackup(remote) {
       const L = { savedAt: state.savedAt || '', replacedAt: state.replacedAt || '' };
       const R = { savedAt: remote.savedAt || '', replacedAt: remote.replacedAt || '' };
+      // finance records are combined one by one whatever happened to the herd (a herd import does not touch them)
+      const F = mergeFin(remote);
       if (R.replacedAt && R.replacedAt > L.savedAt) {
-        await Store.replaceAll(remote.animals, remote.settings, null, { savedAt: remote.savedAt || new Date().toISOString(), log: remote.log, tombs: remote.tombs, replacedAt: remote.replacedAt });
-        return { mode: 'remote', fromRemote: remote.animals.length, fromLocal: 0 };
+        await Store.replaceAll(remote.animals, remote.settings, null, { savedAt: remote.savedAt || new Date().toISOString(), log: remote.log, tombs: { ...remote.tombs, f: F.tombs }, replacedAt: remote.replacedAt, fin: F.list });
+        return { mode: 'remote', fromRemote: remote.animals.length, fromLocal: 0, finFromRemote: F.fromRemote };
       }
-      if (L.replacedAt && L.replacedAt > R.savedAt) return { mode: 'local', fromRemote: 0, fromLocal: state.animals.size };
-      const tombs = { a: { ...((remote.tombs || {}).a || {}) }, e: { ...((remote.tombs || {}).e || {}) } };
+      if (L.replacedAt && L.replacedAt > R.savedAt) {
+        if (F.fromRemote) await Store.replaceAll([...state.animals.values()], null, null, { savedAt: state.savedAt, additive: true, fin: F.list });
+        state.tombs.f = F.tombs; saveLocal();
+        return { mode: 'local', fromRemote: 0, fromLocal: state.animals.size, finFromRemote: F.fromRemote };
+      }
+      const tombs = { a: { ...((remote.tombs || {}).a || {}) }, e: { ...((remote.tombs || {}).e || {}) }, f: F.tombs };
       for (const k of ['a', 'e']) for (const [id, t] of Object.entries(state.tombs[k] || {})) if (!tombs[k][id] || t > tombs[k][id]) tombs[k][id] = t;
       const rmap = new Map((remote.animals || []).map((a) => [a.uid, a]));
       const uids = new Set([...state.animals.keys(), ...rmap.keys()]);
@@ -322,10 +398,10 @@
       }
       const settings = R.savedAt > L.savedAt ? remote.settings : state.settings;
       const seen = new Set(); const log = [...(state.log || []), ...(remote.log || [])].filter((x) => { const k = x.t + x.text; if (seen.has(k)) return false; seen.add(k); return true; }).sort((x, y) => (x.t < y.t ? -1 : 1)).slice(-1500);
-      if (fromRemote || R.savedAt > L.savedAt) {
-        await Store.replaceAll(out, settings, null, { savedAt: R.savedAt > L.savedAt ? R.savedAt : L.savedAt, log, tombs, replacedAt: L.replacedAt > R.replacedAt ? L.replacedAt : R.replacedAt });
+      if (fromRemote || F.fromRemote || R.savedAt > L.savedAt) {
+        await Store.replaceAll(out, settings, null, { savedAt: R.savedAt > L.savedAt ? R.savedAt : L.savedAt, log, tombs, replacedAt: L.replacedAt > R.replacedAt ? L.replacedAt : R.replacedAt, fin: F.list });
       } else { state.tombs = tombs; saveLocal(); }
-      return { mode: 'merged', fromRemote, fromLocal };
+      return { mode: 'merged', fromRemote, fromLocal, finFromRemote: F.fromRemote };
     },
     /** Backup file contents (JSON, optionally gzip-compressed) -> object. */
     async parseBackup(bytes) {

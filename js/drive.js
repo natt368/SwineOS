@@ -445,7 +445,7 @@
       const data = await cDownloadSet(file);
       if (!data || !Array.isArray(data.animals)) throw new Error('The file in Google Drive is not a SwineOS backup.');
       ui().toast(`Loading ${data.animals.length} animals from Google Drive…`);
-      await S.store.replaceAll(data.animals, data.settings, null, { savedAt: data.savedAt || file.modifiedTime, log: data.log, tombs: data.tombs, replacedAt: deliberate ? new Date().toISOString() : data.replacedAt });
+      await S.store.replaceAll(data.animals, data.settings, null, { savedAt: data.savedAt || file.modifiedTime, log: data.log, tombs: data.tombs, replacedAt: deliberate ? new Date().toISOString() : data.replacedAt, fin: data.fin });
       S.model.resetCache();
       cfg.lastRemote = file.key; cfg.lastLocal = S.store.state.savedAt || ''; cfg.lastBackup = new Date().toISOString(); save();
       setStatus('ok');
@@ -455,7 +455,7 @@
     }
     const data = await download(file.id);
     if (!data || !Array.isArray(data.animals)) throw new Error('The file in Google Drive is not a SwineOS backup.');
-    await S.store.replaceAll(data.animals, data.settings, null, { savedAt: data.savedAt || file.modifiedTime, log: data.log, tombs: data.tombs, replacedAt: deliberate ? new Date().toISOString() : data.replacedAt });
+    await S.store.replaceAll(data.animals, data.settings, null, { savedAt: data.savedAt || file.modifiedTime, log: data.log, tombs: data.tombs, replacedAt: deliberate ? new Date().toISOString() : data.replacedAt, fin: data.fin });
     S.model.resetCache();
     if ((file.appProperties || {}).swineos === 'main') { cfg.mainFileId = file.id; cfg.lastRemote = file.modifiedTime; }
     cfg.lastLocal = S.store.state.savedAt || ''; cfg.lastBackup = new Date().toISOString(); save();
@@ -478,6 +478,7 @@
     const p = remote.appProperties || {};
     const from = `the backup saved ${U.fmtDT(p.savedAt || remote.modifiedTime)}${p.device ? ' on ' + p.device : ''}`;
     if (res.mode === 'remote') ui().toast(`Loaded ${from}: the herd was replaced there (import or restore).`, 'ok');
+    else if (res.mode === 'merged' && !res.fromRemote && res.finFromRemote) ui().toast(`Combined with ${from}: ${res.finFromRemote} finance record${res.finFromRemote === 1 ? '' : 's'} from the other computer added. Nothing was lost.`, 'ok');
     else if (res.mode === 'merged' && res.fromRemote) ui().toast(`Combined with ${from}: ${res.fromRemote} animal${res.fromRemote === 1 ? '' : 's'} with changes from the other computer added. Nothing was lost.`, 'ok');
     S.app.rerender();
     return res;
@@ -490,7 +491,7 @@
       // the shared online database holds the records here; Drive keeps the backups.
       // Load from Drive only when the herd is empty (a new copy of SwineOS), else make sure today is backed up.
       const latest = (await cListSets()).find((st) => st.complete);
-      const hasLocal = S.store.animals().length > 0;
+      const hasLocal = S.store.hasRecords();
       if (!hasLocal) { if (latest) await restoreFile(latest, 'Loaded the latest backup from Google Drive'); else setStatus('ok'); return; }
       if (!latest || latest.day !== stampNow().slice(0, 10) || (S.store.state.savedAt && S.store.state.savedAt !== cfg.lastLocal)) await backupNow();
       else { if (!cfg.lastBackup) { cfg.lastBackup = latest.modifiedTime; save(); } setStatus('ok'); }
@@ -499,7 +500,7 @@
     if (S.store.state.backend === 'cloud') return;
     const remote = (await findBackups('main'))[0];
     const localSaved = S.store.state.savedAt || '';
-    const hasLocal = S.store.animals().length > 0;
+    const hasLocal = S.store.hasRecords();
     if (!remote) { if (hasLocal) await backupNow(); else setStatus('ok'); return; }
     const remoteChanged = remote.modifiedTime !== cfg.lastRemote;
     const localChanged = hasLocal && localSaved && localSaved !== cfg.lastLocal;

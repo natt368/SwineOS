@@ -44,6 +44,20 @@
       lastPrinted: '',
     },
     lastEntryDate: '',
+    // Finances: expense type codes as in the barn's Expense & Income workbook (feed: counted in feed cost),
+    // and the average number of sows per year (blank: counted from the herd records)
+    fin: {
+      cats: [
+        { code: 1, name: 'Boars', feed: false }, { code: 2, name: 'Lime', feed: true }, { code: 3, name: 'Utilities', feed: false },
+        { code: 4, name: 'Choline', feed: true }, { code: 5, name: 'Miscellaneous', feed: false }, { code: 6, name: 'Vet & drugs', feed: false },
+        { code: 7, name: 'Creep', feed: true }, { code: 8, name: 'Oil', feed: true }, { code: 9, name: 'Medication', feed: true },
+        { code: 10, name: 'Dical', feed: true }, { code: 11, name: 'Pit', feed: false }, { code: 12, name: 'Grower / finisher', feed: true },
+        { code: 13, name: 'Fly control', feed: false }, { code: 14, name: 'Salt', feed: true }, { code: 15, name: 'Starter', feed: true },
+        { code: 16, name: 'Gilts', feed: false }, { code: 17, name: 'Sow ration', feed: true }, { code: 18, name: 'Premix', feed: true },
+        { code: 19, name: 'Grain', feed: true }, { code: 20, name: 'Soy', feed: true }, { code: 21, name: 'Other', feed: false },
+      ],
+      sows: {},
+    },
   };
 
   /** Event types, in the order of the data-entry tabs. */
