@@ -120,6 +120,7 @@
     back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     next: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     search: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 15l5 5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+    pencil: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M13 7l4 4" stroke="currentColor" stroke-width="2"/></svg>',
     phone: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h3l1.5 4-2 1.5a11 11 0 0 0 6 6l1.5-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 4.5 5.5a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
   };
   const ico = (name) => h('span.fin-i', { html: SVG[name] });
@@ -366,7 +367,7 @@
       { label: 'Type', value: (r) => Number(r.cat) || 0, render: (r) => h('span.fin-chip', `${r.cat || '–'} · ${catName(r.cat)}`) },
       { label: 'Note', value: (r) => [r.tag, r.note].filter(Boolean).join(' · ') },
     ];
-    const grid = ui().grid({ columns, rows: [], cls: 'fin-grid', rowKey: (r) => r.id, emptyText: all.length ? 'No expenses match these filters.' : `No expenses recorded for ${view.year}.`, onRowClick: (r) => editExpense(r, render) });
+    const grid = ui().grid({ columns, rows: [], cls: 'fin-grid', rowKey: (r) => r.id, emptyText: all.length ? 'No expenses match these filters.' : `No expenses recorded for ${view.year}.`, onRowClick: (r) => viewExpense(r, render) });
     function rows() {
       const q = f.q.trim().toLowerCase();
       return all.filter((r) => (!f.month || +r.date.slice(5, 7) - 1 === +f.month) && (!f.cat || String(Number(r.cat) || 0) === f.cat) && (!f.company || r.company === f.company)
@@ -412,6 +413,51 @@
   function defaultDate() {
     const t = U.today();
     return t.startsWith(String(view.year)) ? t : `${view.year}-12-31` < t ? `${view.year}-12-31` : t;
+  }
+
+  /**
+   * A record opens read-only; the pencil beside the X (or Edit) opens the form.
+   * rows: [label, value] pairs; empty values are left out.
+   */
+  function viewDialog(title, rows, onEdit) {
+    const body = h('dl.fin-view', rows.filter(([, v]) => v !== '' && v !== null && v !== undefined && v !== '—')
+      .map(([l, v]) => [h('dt', l), h('dd', v instanceof Node ? v : String(v))]));
+    const edit = () => { m.close(); onEdit(); };
+    const m = ui().modal({ title, width: 520, cls: 'fin-dlg', body, buttons: [{ label: 'Close', primary: true }] });
+    const pencil = h('button.dlg-edit', { type: 'button', title: 'Edit', 'aria-label': 'Edit', onclick: edit }, ico('pencil'));
+    const bar = m.box.querySelector('.dlg-title');
+    bar.insertBefore(pencil, bar.querySelector('.dlg-x'));
+    return m;
+  }
+  const changedLine = (r) => (r.updated ? U.fmtDT(r.updated) : '');
+
+  function viewExpense(r, render) {
+    const per = r.qty ? r.total / r.qty : null;
+    viewDialog('Expense', [
+      ['Date', U.fmt(r.date)], ['Product', r.item], ['Company', r.company],
+      ['Quantity', r.qty ? `${n(r.qty, r.qty % 1 ? 3 : 0)} ${r.unit || ''}`.trim() : ''],
+      ['Total', h('b', money(r.total))], ['Price', per !== null ? `${money(per, per < 10 ? 3 : 2)} per ${(r.unit || 'unit').toLowerCase()}` : ''],
+      ['Type', `${r.cat || '–'} · ${catName(r.cat)}`], ['Type 2', r.tag], ['Note', r.note], ['Last changed', changedLine(r)],
+    ], () => editExpense(r, render));
+  }
+  function viewIncome(r, render) {
+    const hog = r.stream === 'hogs';
+    const m2 = (v, d = 2) => (Number.isFinite(v) ? money(v, d) : '');
+    viewDialog(STREAMS[r.stream] ? STREAMS[r.stream].label : 'Income', [
+      ['Date', U.fmt(r.date)], ['Company', r.company], ['Unit', r.unit], ['Head', n(r.head)],
+      ['Cheque total', h('b', money(r.total))], ['Per head', r.head ? money(r.total / r.head) : ''],
+      ['Average weight', Number.isFinite(r.avgWt) ? n(r.avgWt, 1) + ' kg' : ''], ['Total weight', Number.isFinite(r.totalWt) ? n(r.totalWt, 1) + ' kg' : ''],
+      ...(hog ? [['Index', n(r.index, 1)], ['Price', Number.isFinite(r.price) ? money(r.price, 3) + ' / kg' : ''], ['Fat', n(r.fat, 0)], ['Lean', n(r.lean, 0)],
+        ['Health bonus', Number.isFinite(r.bonus) ? `${m2(r.bonus)} / hog` : ''], ['Lean incentive', Number.isFinite(r.leanInc) ? `${m2(r.leanInc)} / hog` : '']] : [['Outstanding', r.outstanding]]),
+      ['Note', r.note], ['Last changed', changedLine(r)],
+    ], () => editIncome(r, render));
+  }
+  function viewPart(r, render) {
+    viewDialog('Barn part', [
+      ['Date', U.fmt(r.date)], ['Part', r.item], ['Order code', r.orderCode], ['Part number', r.partNo], ['Company', r.company],
+      ['Phone', (r.phone || '').replace(/\D/g, '').length >= 7 ? h('a.fin-tel', { href: 'tel:' + r.phone.replace(/[^\d+]/g, '') }, ico('phone'), r.phone) : r.phone],
+      ['Talk to', r.contact], ['Quantity', r.qty], ['$ / unit', r.unitCost ? money(r.unitCost) : ''], ['For', r.forWhat], ['Notes', r.notes], ['Last changed', changedLine(r)],
+    ], () => editPart(r, render));
   }
 
   function editExpense(rec, render, preset) {
@@ -463,7 +509,7 @@
       if (again) setTimeout(() => editExpense(null, render, { date: d }), 0);
       return false;
     }
-    ui().modal({ title: isNew ? 'New expense' : 'Expense', width: 560, cls: 'fin-dlg', body: form, buttons: dialogFoot(isNew, save, isNew ? null : () => remove(r, `${r.item} (${money(r.total)})`, render)) });
+    ui().modal({ title: isNew ? 'New expense' : 'Edit expense', width: 560, cls: 'fin-dlg', body: form, buttons: dialogFoot(isNew, save, isNew ? null : () => remove(r, `${r.item} (${money(r.total)})`, render)) });
   }
   /** After saving a record of another year, show that year. */
   function followYear(iso) { const y = +iso.slice(0, 4); if (y !== view.year) view.year = y; }
@@ -509,7 +555,7 @@
       ] : [{ label: 'Outstanding', value: (r) => r.outstanding || '' }]),
       { label: 'Note', value: (r) => r.note || '' },
     ];
-    const grid = ui().grid({ columns, rows: [], cls: 'fin-grid', rowKey: (r) => r.id, emptyText: recs.length ? 'No cheques match these filters.' : `No ${STREAMS[st].label.toLowerCase()} recorded for ${view.year}.`, onRowClick: (r) => editIncome(r, render) });
+    const grid = ui().grid({ columns, rows: [], cls: 'fin-grid', rowKey: (r) => r.id, emptyText: recs.length ? 'No cheques match these filters.' : `No ${STREAMS[st].label.toLowerCase()} recorded for ${view.year}.`, onRowClick: (r) => viewIncome(r, render) });
     function rows() {
       const q = f.q.trim().toLowerCase();
       return recs.filter((r) => (!f.month || +r.date.slice(5, 7) - 1 === +f.month) && (!f.company || r.company === f.company)
@@ -602,7 +648,7 @@
       if (again) setTimeout(() => editIncome(null, render, { date: d, stream: out.stream }), 0);
       return false;
     }
-    ui().modal({ title: isNew ? 'New income' : STREAMS[r.stream].label, width: 600, cls: 'fin-dlg', body: form, buttons: dialogFoot(isNew, save, isNew ? null : () => remove(r, `the ${STREAMS[r.stream].one} of ${U.fmt(r.date)} (${money(r.total)})`, render)) });
+    ui().modal({ title: isNew ? 'New income' : `Edit ${STREAMS[r.stream].one}`, width: 600, cls: 'fin-dlg', body: form, buttons: dialogFoot(isNew, save, isNew ? null : () => remove(r, `the ${STREAMS[r.stream].one} of ${U.fmt(r.date)} (${money(r.total)})`, render)) });
   }
 
   /* ---------- Year end (REPORT and Year End sheets) ---------- */
@@ -670,7 +716,7 @@
       { label: '$ / unit', num: true, value: (r) => r.unitCost ?? '', render: (r) => (r.unitCost ? money(r.unitCost) : '') },
       { label: 'For / notes', value: (r) => [r.forWhat, r.notes].filter(Boolean).join(' · ') },
     ];
-    const grid = ui().grid({ columns, rows: [], cls: 'fin-grid.fin-parts', rowKey: (r) => r.id, emptyText: all.length ? 'No parts match.' : 'No barn parts yet. Import the Barn parts workbook or add a part.', onRowClick: (r) => editPart(r, render) });
+    const grid = ui().grid({ columns, rows: [], cls: 'fin-grid.fin-parts', rowKey: (r) => r.id, emptyText: all.length ? 'No parts match.' : 'No barn parts yet. Import the Barn parts workbook or add a part.', onRowClick: (r) => viewPart(r, render) });
     function rows() {
       const q = f.q.trim().toLowerCase();
       return all.filter((r) => !q || [r.item, r.orderCode, r.partNo, r.company, r.phone, r.contact, r.qty, r.forWhat, r.notes].some((x) => String(x || '').toLowerCase().includes(q)))
@@ -717,7 +763,7 @@
       if (again) setTimeout(() => editPart(null, render), 0);
       return false;
     }
-    ui().modal({ title: isNew ? 'New barn part' : 'Barn part', width: 620, cls: 'fin-dlg', body: form, buttons: dialogFoot(isNew, save, isNew ? null : () => remove(r, r.item, render)) });
+    ui().modal({ title: isNew ? 'New barn part' : 'Edit barn part', width: 620, cls: 'fin-dlg', body: form, buttons: dialogFoot(isNew, save, isNew ? null : () => remove(r, r.item, render)) });
   }
 
   /* ---------- Finance settings ---------- */
