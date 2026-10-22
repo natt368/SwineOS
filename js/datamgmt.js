@@ -62,8 +62,7 @@
             action('Expense & Income workbook…', 'Finances: expenses, hog sales, cripples and cull sows & boars from the Excel workbook (.xls or .xlsx).', () => S.finance.importDialog(render))),
           prog),
         card('Start over', 'Download a backup file first if you may need the records again.',
-          h('div.dm-acts.dm-acts3',
-            action('Load example herd', 'Replaces the herd with about 480 example sows to try the program', () => S.settingsUI.loadDemo(prog)),
+          h('div.dm-acts',
             action('Clear herd records', 'Deletes every animal and event. Finances are kept.', () => S.settingsUI.clearAll(prog), '.danger'),
             action('Clear finance records', 'Deletes every expense and income record. The herd is kept.', clearFinances, '.danger'))),
         recentChanges());

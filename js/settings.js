@@ -157,19 +157,6 @@
     S.store.log(`Imported ${add.length} animals from CSV`);
     ui().toast(`${add.length} animals imported.`, 'ok');
   }
-  async function loadDemo(prog) {
-    const ok = await ui().confirmBox('Load example herd', 'Replace all current records with an example herd of about 480 sows and 40 boars with two years of history? Use this to try the program out.', 'Load example');
-    if (!ok) return;
-    prog.textContent = 'Building example herd…';
-    await new Promise((r) => setTimeout(r, 30));
-    const animals = S.demo.generate();
-    await S.store.replaceAll(animals, { ...S.store.settings, demo: true, farmName: 'Example Farm', farmNumber: '1000001' }, progress(prog));
-    S.model.resetCache();
-    S.store.log('Loaded example herd');
-    ui().toast('Example herd loaded.', 'ok');
-    U.$$('.modal-back').forEach((m) => m.remove());
-    S.app.home();
-  }
   async function clearAll(prog) {
     const ok = await ui().confirmBox('Clear all records', 'Delete every animal and event? Download a backup first if you may need them. Settings and code lists are kept.', 'Delete everything');
     if (!ok) return;
@@ -181,5 +168,5 @@
     S.app.home();
   }
 
-  S.settingsUI = { open, loadDemo, restore, importPigwin, importCsv, clearAll };
+  S.settingsUI = { open, restore, importPigwin, importCsv, clearAll };
 })(window.SOS);

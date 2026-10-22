@@ -6,7 +6,7 @@ It is a plain web app (HTML, CSS and JavaScript, no build step and no server). O
 
 ## Moving from PigWIN / PigLITTER
 
-Make a farm backup in PigWIN (PigMAIN → Backup farm data). It is saved as a `.BDR` file named after the farm, for example `01042301Veteran Colony (AB)[2020_2_3][10_18_26].BDR`. In SwineOS open **More options → Import PigWIN backup** (or Data management (gear on the SwineOS home page)) and choose that file.
+Make a farm backup in PigWIN (PigMAIN → Backup farm data). It is saved as a `.BDR` file named after the farm, for example `01042301Veteran Colony (AB)[2020_2_3][10_18_26].BDR`. In SwineOS open **Data management** (the gear on the SwineOS home page) → **PigWIN backup (.BDR)** and choose that file.
 
 The backup is read in the browser. Nothing is uploaded anywhere. These records are converted:
 
@@ -100,7 +100,7 @@ On the website version (GitHub Pages), **Data management (gear on the SwineOS ho
 - The connected folder (full path and Google account) is shown on the main menu, in the title-bar badge and in Data management (gear on the SwineOS home page).
 - On a new computer, press **Load from Google Drive** on the welcome screen (or Connect in Data management (gear on the SwineOS home page)): SwineOS signs in, finds the folder that holds the SwineOS backup by itself and loads the herd. After that it remembers the folder.
 - When SwineOS opens, it loads the newest backup from the folder. Google's sign-in lasts one hour; after that the browser only lets Google renew it from a click, so if it is blocked on opening, the first click or key press anywhere renews it and loads the backup (no extra dialog). Allowing pop-ups for the site makes this happen without the click. Every 10 minutes, and when you come back to the tab, it checks for backups made on another computer. 
-- **Two computers (e.g. barn and office) never overwrite each other.** Before every upload SwineOS checks whether the backup in Drive changed since this computer last synced (or was never synced with it). If so it first combines that backup with the records here: animals and events from both computers are kept, for the same event the latest edit wins, and events or animals deleted on either computer stay deleted (deletions are remembered with a time). It checks again after uploading in case the other computer backed up at the same moment. An empty or out-of-date computer therefore loads the herd instead of replacing it. Replacing the whole herd on purpose (PigWIN import, restoring a backup, example herd, clear all) is taken over by the other computers as it is. PigWIN imports give every event PigWIN's own event number, so events from different backups are matched correctly.
+- **Two computers (e.g. barn and office) never overwrite each other.** Before every upload SwineOS checks whether the backup in Drive changed since this computer last synced (or was never synced with it). If so it first combines that backup with the records here: animals and events from both computers are kept, for the same event the latest edit wins, and events or animals deleted on either computer stay deleted (deletions are remembered with a time). It checks again after uploading in case the other computer backed up at the same moment. An empty or out-of-date computer therefore loads the herd instead of replacing it. Replacing the whole herd on purpose (PigWIN import, restoring a backup, clear all) is taken over by the other computers as it is. PigWIN imports give every event PigWIN's own event number, so events from different backups are matched correctly.
 - The badge in every window's title bar shows when the last backup was made.
 
 One-time set-up: Google requires an OAuth Client ID for the site. In console.cloud.google.com create a project, enable the **Google Drive API**, set up the **OAuth consent screen** (External, add your Google address as a test user), then create an **OAuth client ID → Web application** with `https://natt368.github.io` as an authorized JavaScript origin. Paste the Client ID in Data management (gear on the SwineOS home page), or put it in `js/config.js` so every computer has it. Google shows an "unverified app" warning the first time: choose Continue.
@@ -131,7 +131,6 @@ The workflow in `.github/workflows/pages.yml` publishes the default branch. Unti
 | `js/mainmenu.js` | Main menu, PigMAIN set-up options, data checks |
 | `js/actionlists.js` | Action lists dialog and printout |
 | `js/settings.js` | Settings, backup / restore, import |
-| `js/demo.js` | Example herd generator |
 | `js/finance.js` | Finances window: overview, expenses, income, year end, entry forms |
 | `js/finance-import.js`, `js/xls.js` | Reading the Expense & Income workbook (.xls / .xlsx) |
 | `js/ui.js`, `js/util.js` | Window, dialog, grid and chart helpers; dates and formatting |

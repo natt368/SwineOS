@@ -19,7 +19,7 @@
     backend: 'local',
     ready: false,
     // for merging backups made on two computers: when animals / events were deleted,
-    // and when the whole herd was last replaced (PigWIN import, restore, example herd, clear); f: finance records
+    // and when the whole herd was last replaced (PigWIN import, restore, clear); f: finance records
     tombs: { a: {}, e: {}, f: {} },
     replacedAt: '',
   };
@@ -271,7 +271,7 @@
         try { await db.doc('meta/log').set({ entries: state.log }); } catch (e) { /* log is best effort */ }
       } else saveLocal();
     },
-    /** Replace the whole herd (restore backup / demo / clear). */
+    /** Replace the whole herd (restore backup / PigWIN import / clear). */
     async replaceAll(animals, settings, onProgress, opts = {}) {
       const old = [...state.animals.keys()];
       state.animals = new Map(animals.map((a) => [a.uid, a]));

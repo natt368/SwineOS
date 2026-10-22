@@ -5,7 +5,7 @@ const VERSION = '__BUILD__';
 const CACHE = 'swineos-' + VERSION;
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'css/swineos.css',
-  'js/util.js', 'js/config.js', 'js/model.js', 'js/store.js', 'js/calc.js', 'js/ui.js', 'js/demo.js', 'js/entry.js',
+  'js/util.js', 'js/config.js', 'js/model.js', 'js/store.js', 'js/calc.js', 'js/ui.js', 'js/entry.js',
   'js/reports.js', 'js/sowcard.js', 'js/actionlists.js', 'js/settings.js', 'js/pigwin-import.js', 'js/actionentry.js',
   'js/reportgen.js', 'js/drive.js', 'js/safety.js', 'js/mainmenu.js', 'js/xls.js', 'js/finance-import.js', 'js/finance.js', 'js/datamgmt.js', 'js/landing.js', 'js/app.js',
 ];
