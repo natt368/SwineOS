@@ -28,7 +28,9 @@ Piglets lost between farrowing and weaning that were never entered as deaths are
 
 ## What it does
 
-**Main menu** – Data Entry on the left (Sows / Boars, Gilt pool, Action list entry, Vaccinations, More options), Reports on the right (Sows / Gilts, Piglets, Boars, Sow cards, Herd performance, Action lists, Report generator), and PigMAIN for set-up options.
+**Main menu** – Data Entry on the left (Sows / Boars, Gilt pool, Action list entry, Vaccinations, Moved to finisher, More options), Reports on the right (Sows / Gilts, Piglets, Boars, Sow cards, Herd performance, Action lists, Report generator), and PigMAIN for set-up options.
+
+**Moved to finisher** – the groups of pigs moved from the nursery rooms to the finisher (date, pigs, from room, finisher room, days, pen), in place of the MOVED TO FINISHER sheet of the Expense & Income workbook: pigs moved this year, groups, average group and month, last move, pigs moved by month, and the list of moves (opens read-only; the pencil edits). Import the sheet on the Data management page (or from the empty screen). Saved and backed up with the rest of the records.
 
 **Gilt pool** – the data entry screen for replacement gilts, with Gilts due for mating / mated / culled lists and V-boar and Synchronise events.
 
@@ -132,5 +134,6 @@ The workflow in `.github/workflows/pages.yml` publishes the default branch. Unti
 | `js/actionlists.js` | Action lists dialog and printout |
 | `js/settings.js` | Settings, backup / restore, import |
 | `js/finance.js` | Finances window: overview, expenses, income, year end, entry forms |
-| `js/finance-import.js`, `js/xls.js` | Reading the Expense & Income workbook (.xls / .xlsx) |
+| `js/finisher.js` | Moved to finisher (Herd records → Data Entry) |
+| `js/finance-import.js`, `js/xls.js` | Reading the Expense & Income workbook (.xls / .xlsx), including its MOVED TO FINISHER sheet |
 | `js/ui.js`, `js/util.js` | Window, dialog, grid and chart helpers; dates and formatting |

@@ -26,6 +26,7 @@
       const removed = (a) => S.model.analyze(a).removed;
       const females = animals.filter((a) => a.sex === 'F');
       const events = animals.reduce((n, a) => n + (a.events || []).length, 0);
+      const moves = S.store.fin().filter((r) => r.kind === 'move');
       const fin = S.store.fin().filter((r) => r.kind === 'exp' || r.kind === 'inc');
       const years = [...new Set(fin.map((r) => (r.date || '').slice(0, 4)).filter(Boolean))].sort();
       const ss = S.store.saveState || {};
@@ -42,6 +43,7 @@
               h('h3', 'Herd records'),
               row('Animals', `${animals.length} (${females.filter((a) => !removed(a)).length} females and ${animals.filter((a) => a.sex === 'M' && !removed(a)).length} boars in the herd)`),
               row('Events', events.toLocaleString('en-US')),
+              row('Moved to finisher', `${moves.length.toLocaleString('en-US')} groups, ${moves.reduce((n, r) => n + (r.head || 0), 0).toLocaleString('en-US')} pigs`),
               S.store.settings.demo ? h('p.demo-note', 'The herd on file is EXAMPLE data. Clear it before entering your own animals.') : null,
               h('h3', 'Finances'),
               row('Expenses', fin.filter((r) => r.kind === 'exp').length.toLocaleString('en-US') + ' records'),
@@ -59,6 +61,7 @@
           h('div.dm-acts.dm-acts3',
             fileAction('PigWIN backup (.BDR)…', 'Herd records: every sow, boar and their history from PigWIN / PigLITTER. Replaces the herd now on file; finances are kept.', '.bdr,.BDR,.zip', (f) => S.settingsUI.importPigwin(f, prog)),
             fileAction('Animals from CSV…', 'Herd records: adds new animals. Columns ID, Sex, Birth date, Arrival date, Entry date, Parity, Breed, Location.', '.csv,text/csv', (f) => S.settingsUI.importCsv(f, prog)),
+            action('Moved to finisher…', 'Herd records: the MOVED TO FINISHER sheet of the Expense & Income workbook (.xls or .xlsx).', () => S.finisher.importDialog(render)),
             action('Expense & Income workbook…', 'Finances: expenses, hog sales, cripples and cull sows & boars from the Excel workbook (.xls or .xlsx).', () => S.finance.importDialog(render))),
           prog),
         card('Start over', 'Download a backup file first if you may need the records again.',
@@ -75,7 +78,7 @@
     }
 
     async function clearFinances() {
-      const all = S.store.fin();
+      const all = S.store.fin().filter((r) => r.kind === 'exp' || r.kind === 'inc');
       if (!all.length) { ui().toast('There are no finance records.'); return; }
       const ok = await ui().confirmBox('Clear finance records', `Delete all ${all.length} finance records (expenses and income)? Download a backup first if you may need them. The herd records are kept.`, 'Delete finance records');
       if (!ok) return;
