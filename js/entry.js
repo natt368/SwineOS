@@ -525,8 +525,10 @@
     const count = h('span.list-count');
     listTabBar.appendChild(count);
 
-    const idInput = h('input#entry-id', { autocomplete: 'off', spellcheck: 'false', placeholder: 'Type ID and press Enter', 'aria-label': 'Animal ID' });
+    const idInput = h('input#entry-id', { autocomplete: 'off', spellcheck: 'false', placeholder: 'Type an ID', 'aria-label': 'Animal ID' });
     idInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); goId(); } });
+    // history follows the ID as it is typed: "39" shows 39, "3977" shows 3977, no Enter needed
+    idInput.addEventListener('input', U.debounce(() => liveId(), 120));
     // the ID box always has the cursor, with any earlier ID highlighted so typing replaces it
     let clickSelect = false;
     idInput.addEventListener('focus', () => { idInput.select(); clickSelect = true; });
@@ -618,7 +620,7 @@
     function renderHistory() {
       histHost.innerHTML = '';
       const a = st.sel;
-      if (!a) { histTitle.textContent = 'History for animal:'; histHost.appendChild(h('p.hint', 'Type an ID above and press Enter, or pick an animal from the list. The event tab at the bottom (red) decides what Enter records.')); return; }
+      if (!a) { histTitle.textContent = 'History for animal:'; histHost.appendChild(h('p.hint', 'Type an ID above – the history shows as you type – or pick an animal from the list. Enter then records the event tab at the bottom (red).')); return; }
       const r = A(a);
       histTitle.innerHTML = '';
       histTitle.append('History for animal:  ', h('b', a.id), h('span.hist-status', `  ${r.status}${a.sex === 'F' ? ' · parity ' + r.parity : ''}${r.lactating ? ' · ' + r.piglets + ' piglets' : ''}${r.location ? ' · ' + r.location : ''}`));
@@ -699,6 +701,17 @@
         { label: 'Animal details…', onClick: () => openDetails(a, (u) => { st.sel = u; refresh(); }) },
         { label: 'Sow card', onClick: () => S.sowCard.open(a) },
       ]);
+    }
+    function liveId() {
+      const id = idInput.value.trim();
+      const a = id ? S.store.findById(id) : null;
+      if (a && a === st.sel) return;
+      st.sel = a; st.histSel = null;
+      renderHistory();
+      if (!a && id) histHost.replaceChildren(h('p.hint', `No animal with ID ${id}. Press Enter to add it as a new animal.`));
+      const row = a && win.querySelector(`.list-grid [data-key="${CSS.escape(a.uid)}"]`);
+      win.querySelectorAll('.list-grid .sel').forEach((r) => r.classList.remove('sel'));
+      if (row) { row.classList.add('sel'); row.scrollIntoView({ block: 'nearest' }); }
     }
     function goId() {
       const id = idInput.value.trim();

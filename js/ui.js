@@ -150,7 +150,7 @@
       if (!data.length) tbody.appendChild(h('tr.empty', h('td', { colspan: columns.length }, emptyText)));
       data.slice(0, maxRows).forEach((r, i) => {
         const key = rowKey(r, i);
-        const tr = h('tr', { class: [selectedKey === key ? 'sel' : '', rowClass ? rowClass(r) : ''].join(' ').trim() || null, tabindex: onRowClick ? 0 : null });
+        const tr = h('tr', { class: [selectedKey === key ? 'sel' : '', rowClass ? rowClass(r) : ''].join(' ').trim() || null, tabindex: onRowClick ? 0 : null, 'data-key': key != null ? String(key) : null });
         columns.forEach((c) => {
           const v = c.render ? c.render(r) : c.value(r);
           tr.appendChild(h('td', { class: c.num ? 'num' : null }, v instanceof Node ? v : (v ?? '')));
