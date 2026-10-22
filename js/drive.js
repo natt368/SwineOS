@@ -208,7 +208,7 @@
       if (!x && !/^SwineOS backup.*\.json(\.gz)?$/.test(f.title || '')) continue;
       const key = x ? `${x[2]} ${x[3]} ${x[1]}` : f.id; // older single files (website version) count as one set
       let st = m.get(key);
-      if (!st) { st = { key, farm: x ? x[1] : '', day: x ? x[2] : (f.modifiedTime || '').slice(0, 10), name: x ? `SwineOS backup - ${x[1]} - ${x[2]} ${x[3].replace(/\./g, ':')}` : f.title, total: x ? +(x[5] || 1) : 1, parts: [], modifiedTime: f.modifiedTime || '', size: 0, timed: !!x }; m.set(key, st); }
+      if (!st) { st = { key, farm: x ? x[1] : '', day: x ? x[2] : (f.modifiedTime || '').slice(0, 10), name: x ? `SwineOS backup - ${x[1]} - ${U.fmt(x[2])} ${x[3].replace(/\./g, ':')}` : f.title, total: x ? +(x[5] || 1) : 1, parts: [], modifiedTime: f.modifiedTime || '', size: 0, timed: !!x }; m.set(key, st); }
       st.parts[(x ? +(x[4] || 1) : 1) - 1] = f;
       st.size += +f.fileSize || 0;
       if ((f.modifiedTime || '') > st.modifiedTime) st.modifiedTime = f.modifiedTime;
