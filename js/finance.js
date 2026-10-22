@@ -13,7 +13,7 @@
     culls: { label: 'Cull sows & boars', one: 'cull sale', unit: 'SOWS' },
   };
   const INCOME = '#2f56d6'; const EXPENSE = '#d97a1e';
-  // record kinds in the finance store that hold money (pigs moved to finisher are kept there too)
+  // record kinds in the finance store that hold money (pigs moved to Finisher are kept there too)
   const MONEY = new Set(['exp', 'inc']);
 
   /* ---------- formatting ---------- */
@@ -986,6 +986,6 @@ tr { break-inside: avoid; }
   const VIEWS = { overview: overviewView, exp: expensesView, inc: incomeView, year: yearEndView };
 
   S.finance = { open, summarize, reportHTML, importDialog: (done) => importDialog(done || (() => {})),
-    // shared with the other royal blue screens (Moved to finisher)
+    // shared with the other royal blue screens (Moved to Finisher)
     kit: { money, n, num, ico, kpi, barList, filterBar, tableOf, datalist, moneyInput, dialogFoot, viewDialog, remove, changedLine, distinct, monthsIn } };
 })(window.SOS);
