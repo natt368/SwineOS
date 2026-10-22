@@ -7,10 +7,16 @@
   let root;
   let rerenderFn = null;
 
+  // Browser Back/Forward: every screen is a history entry that knows how to rebuild itself.
+  const screens = []; let at = -1; let quiet = 0;
+  // history calls can be refused inside some embedded viewers; navigation still works without them
+  const hist = (how, i) => { try { history[how]({ sos: i }, '', location.pathname + location.search); } catch (e) { /* ignore */ } };
+  const still = (fn) => { quiet++; try { return fn(); } finally { quiet--; } };
+
   const app = {
     current: null,
     entryDateSticky: true,
-    mount(win, rerender) {
+    mount(win, rerender, rebuild) {
       root.innerHTML = '';
       if (S.store.settings.demo) root.appendChild(h('div.demo-banner', 'EXAMPLE DATA – this herd was generated for trying the program. Clear it under Settings → Backup & data before entering your own animals.'));
       root.appendChild(win);
@@ -18,20 +24,27 @@
       app.current = win;
       rerenderFn = rerender || null;
       window.scrollTo(0, 0);
+      const build = rebuild || rerender;
+      if (at < 0 && build) { at = 0; screens[0] = build; hist('replaceState', 0); return; }
+      if (quiet || !build) { if (build) screens[at] = build; return; }
+      at += 1; screens.length = at; screens[at] = build;
+      hist('pushState', at);
     },
     /** First screen: Herd records / Finances. */
-    landing() { app.mount(S.landing.landing(), () => app.landing()); location.hash === '' || history.replaceState(null, '', location.pathname); },
+    landing() { app.mount(S.landing.landing(), () => app.landing()); },
     /** Herd records main menu (data entry and reports). */
-    home() { app.mount(S.mainMenu.home(), () => app.home()); location.hash === '' || history.replaceState(null, '', location.pathname); },
-    finances() { app.mount(S.finance.open(), null); },
+    home() { app.mount(S.mainMenu.home(), () => app.home()); },
+    finances() { app.mount(S.finance.open(), null, () => app.finances()); },
     reports(section = 'sows') { app.mount(S.reports.menu(section), () => app.reports(section)); },
-    entry(list) { const w = S.entry.open(list ? { list } : {}); app.mount(w, null); },
-    show(fn) { const w = fn(); if (w) app.mount(w, null); },
+    entry(list) { const w = S.entry.open(list ? { list } : {}); app.mount(w, null, () => app.entry(list)); },
+    show(fn) { let w; still(() => { w = fn(); }); if (w) app.mount(w, null, () => app.show(fn)); },
     openSow(a) {
       const w = S.entry.open();
-      app.mount(w, null);
+      app.mount(w, null, () => app.openSow(S.store.get(a.uid) || a));
       w.selectAnimal(a);
     },
+    /** Redraw without adding a Back step (records changed, start-up). */
+    still,
     rerender() { if (app.current && app.current.refresh) app.current.refresh(); else if (rerenderFn) rerenderFn(); },
     help,
   };
@@ -102,22 +115,32 @@
       S.model.resetCache();
       // keep open windows current when records change (e.g. another computer saves)
       if (!U.$('.modal-back') && app.current && app.current.refresh) app.current.refresh();
-      else if (!U.$('.modal-back') && app.current && app.current.classList.contains('home-win')) app.home();
-      else if (!U.$('.modal-back') && app.current && app.current.classList.contains('landing-win')) app.landing();
+      else if (!U.$('.modal-back') && app.current && app.current.classList.contains('home-win')) still(app.home);
+      else if (!U.$('.modal-back') && app.current && app.current.classList.contains('landing-win')) still(app.landing);
       lastCount = S.store.animals().length;
     });
     if (S.drive.configured()) {
       // load the newest Google Drive backup before deciding the herd is empty; keep the pig running meanwhile
       if (!S.store.hasRecords()) loadingText('Loading herd from Google Drive…');
-      else app.landing();
+      else still(app.landing);
       await Promise.race([S.drive.startup(), new Promise((r) => setTimeout(r, S.store.hasRecords() ? 20000 : 60000))]);
     }
-    if (root.querySelector('.loading')) app.landing();
+    if (root.querySelector('.loading')) still(app.landing);
     if (!S.store.hasRecords() && !U.$('.modal-back')) {
       if (S.drive.configured() && S.drive.status.state === 'connect') ui().toast('Click anywhere to load your herd from Google Drive.');
       else welcome();
     }
     void lastCount;
+    window.addEventListener('popstate', (e) => {
+      const i = e.state && typeof e.state.sos === 'number' ? e.state.sos : 0;
+      // Back with a dialog open closes the dialog and stays on the page
+      const dlg = U.$$('.modal-back').pop();
+      if (dlg) { hist('pushState', at); const x = dlg.querySelector('.dlg-x'); if (x) x.click(); else dlg.remove(); return; }
+      U.$$('.ctx-menu').forEach((m) => m.remove());
+      const build = screens[i];
+      if (!build) { at = i; still(app.landing); return; }
+      at = i; still(build);
+    });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'F2' && !U.$('.modal-back')) { e.preventDefault(); app.entry(); }
     });

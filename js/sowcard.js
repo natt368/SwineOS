@@ -447,7 +447,7 @@
     if (initial) st.current = S.store.get(initial.uid) || initial;
     else { const p = pool(); st.current = p[0] || null; }
     renderLists(); renderCard();
-    S.app.mount(win, null);
+    S.app.mount(win, null, () => open(st.current || initial));
     return win;
   }
 
