@@ -1,6 +1,6 @@
 /* SwineOS – turn the barn's Excel workbooks into finance records.
  * Reads the "Expense & Income" workbook (sheets EXPENSE, HOGS SALES, CRIPPLES, CULL SOW & BOARS,
- * INFORMATION.SHEET, REPORT).
+ * INFORMATION.SHEET, REPORT), and the MOVED TO FINISHER sheet for Herd records → Moved to finisher.
  * Columns are found by their header text, so added or moved columns do not break the import.
  * Works in browsers and Node 18+. */
 (function (root) {
@@ -140,7 +140,34 @@
     return { year, farm: info.farm || '', sows: info.sows || 0, codes: reportCodes(wb), records };
   }
 
-  const api = { convert, month };
+  /** The MOVED TO FINISHER sheet -> { year, records } (kind 'move': date, head, rooms, days, pen). */
+  function convertMoves(wb, fallbackYear) {
+    const s = sheet(wb, 'MOVED TO FINISHER', 'MOVED TO FINISHERS', 'FINISHER');
+    if (!s) return { year: fallbackYear, records: [] };
+    const info = farmInfo(wb);
+    const year = titleYear(s) || info.year || fallbackYear || new Date().getFullYear();
+    const hd = header(s.rows);
+    if (!hd) return { year, records: [] };
+    const row0 = s.rows[hd.row] || [];
+    // ROOM # comes up to three times: the room the pigs left, then the finisher's room (DAYS and PEN # beside it)
+    const rooms = row0.map((v, i) => (key(v).startsWith('ROOM') ? i : -1)).filter((i) => i >= 0);
+    const C = { m: hd.cols.MONTH, d: col(hd, /^DATE$/), head: col(hd, /^AMOUNT$/, /^AMO/), days: col(hd, /^DAYS/), pen: col(hd, /^PEN/) };
+    const out = [];
+    for (let r = hd.row + 1; r < s.rows.length; r++) {
+      const row = s.rows[r]; if (!row) continue;
+      const m = month(at(row, C.m)); const head = num(at(row, C.head));
+      if (!m || !head) continue;
+      const rec = { id: `x${year}m${r + 1}`, kind: 'move', date: isoDate(year, m, at(row, C.d)), head };
+      const room = str(at(row, rooms[0])); if (room) rec.room = room;
+      const fin = [rooms[1], rooms[2]].map((c) => str(at(row, c))).filter(Boolean).join(' / '); if (fin) rec.finRoom = fin;
+      const days = num(at(row, C.days)); if (days) rec.days = days;
+      const pen = str(at(row, C.pen)); if (pen) rec.pen = pen;
+      out.push(rec);
+    }
+    return { year, records: out };
+  }
+
+  const api = { convert, convertMoves, month };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else { root.SOS = root.SOS || {}; root.SOS.finImport = api; }
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -13,6 +13,8 @@
     culls: { label: 'Cull sows & boars', one: 'cull sale', unit: 'SOWS' },
   };
   const INCOME = '#2f56d6'; const EXPENSE = '#d97a1e';
+  // record kinds in the finance store that hold money (pigs moved to finisher are kept there too)
+  const MONEY = new Set(['exp', 'inc']);
 
   /* ---------- formatting ---------- */
   function money(v, dec = 2) {
@@ -44,7 +46,7 @@
 
   /* ---------- calculations (the workbook's REPORT sheet) ---------- */
   function years() {
-    const ys = new Set(S.store.fin().filter((r) => r.kind !== 'part' && r.date).map((r) => +r.date.slice(0, 4)));
+    const ys = new Set(S.store.fin().filter((r) => MONEY.has(r.kind) && r.date).map((r) => +r.date.slice(0, 4)));
     ys.add(+U.today().slice(0, 4));
     return [...ys].sort((a, b) => a - b);
   }
@@ -104,7 +106,7 @@
   /** Last month (0-based) with any income or expense in the year, or -1. */
   function lastMonth(year) {
     let m = -1;
-    for (const r of S.store.fin()) if (r.kind !== 'part' && r.date && r.date.startsWith(String(year))) m = Math.max(m, +r.date.slice(5, 7) - 1);
+    for (const r of S.store.fin()) if (MONEY.has(r.kind) && r.date && r.date.startsWith(String(year))) m = Math.max(m, +r.date.slice(5, 7) - 1);
     return m;
   }
 
@@ -243,7 +245,7 @@
   function mini(label, value) { return h('div.fin-mini', h('span', label), h('b', value || '—')); }
 
   function emptyState(y, render) {
-    const has = S.store.fin().some((r) => r.kind !== 'part');
+    const has = S.store.fin().some((r) => MONEY.has(r.kind));
     return h('div.fin-empty',
       h('div.fin-empty-ico', { html: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="2.8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 9.5v5M18 9.5v5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>' }),
       h('h2', has ? `Nothing recorded for ${y} yet` : 'Start your farm\'s income and expense book'),
@@ -316,13 +318,13 @@
     return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
   }
   /** Horizontal bars: label, bar, amount and share of the total. */
-  function barList(items, total) {
+  function barList(items, total, fmt = (v) => money(v, 0)) {
     if (!items.length) return h('p.fin-muted', 'Nothing yet.');
     const max = Math.max(...items.map((x) => x.value));
     return h('ul.fin-bars', items.map((x) => h('li', h('button', { type: 'button', onclick: x.onClick, title: `Show ${x.label}` },
       h('span.fb-l', x.label, x.tag ? h('em', x.tag) : null),
       h('span.fb-track', h('span.fb-fill', { style: { width: Math.max(0.5, (x.value / max) * 100) + '%' } })),
-      h('span.fb-v', money(x.value, 0), h('small', x.note || pct(x.value / total)))))));
+      h('span.fb-v', fmt(x.value), h('small', x.note || pct(x.value / total)))))));
   }
 
   /* ---------- Expenses ---------- */
@@ -983,5 +985,7 @@ tr { break-inside: avoid; }
 
   const VIEWS = { overview: overviewView, exp: expensesView, inc: incomeView, year: yearEndView };
 
-  S.finance = { open, summarize, reportHTML, importDialog: (done) => importDialog(done || (() => {})) };
+  S.finance = { open, summarize, reportHTML, importDialog: (done) => importDialog(done || (() => {})),
+    // shared with the other royal blue screens (Moved to finisher)
+    kit: { money, n, num, ico, kpi, barList, filterBar, tableOf, datalist, moneyInput, dialogFoot, viewDialog, remove, changedLine, distinct, monthsIn } };
 })(window.SOS);

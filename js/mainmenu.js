@@ -39,7 +39,7 @@
           pill('Gilt pool', () => S.app.show(S.entry.openGiltPool)),
           pill('Action list entry', () => S.app.show(S.actionEntry.open)),
           pill('Vaccinations', () => S.app.show(S.reports.vaccinationsEntry)),
-          pill('PigPAD', null, { disabled: true, title: 'Handheld entry is not available' }),
+          pill('Moved to finisher', () => S.app.show(S.finisher.open)),
           pill('More options', moreOptions))),
       h('section.mm2-tile.mm2-main.mm2-reports',
         tileHead('Reports', 'Herd results, lists and cards'),
