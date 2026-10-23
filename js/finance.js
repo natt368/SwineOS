@@ -145,9 +145,9 @@
         h('button.fin-home', { type: 'button', title: 'Back to the SwineOS start screen', onclick: () => S.app.landing() }, ico('back'), h('span', 'SwineOS')),
         h('div.fin-titles', h('h1', 'Finances'), h('p', [S.store.settings.farmName, `Income and expenses ${view.year}`].filter(Boolean).join('  ·  '))),
         h('div.fin-year', { role: 'group', 'aria-label': 'Year' },
-          h('button', { type: 'button', title: 'Previous year', 'aria-label': 'Previous year', disabled: i <= 0, onclick: () => { view.year = ys2[i - 1]; render(); } }, ico('back')),
-          h('select', { 'aria-label': 'Year', onchange: (e) => { view.year = +e.target.value; render(); } }, ys2.map((y) => h('option', { value: y, selected: y === view.year ? 'selected' : null }, String(y)))),
-          h('button', { type: 'button', title: 'Next year', 'aria-label': 'Next year', disabled: i >= ys2.length - 1, onclick: () => { view.year = ys2[i + 1]; render(); } }, ico('next'))),
+          h('button', { type: 'button', title: 'Previous year', 'aria-label': 'Previous year', disabled: i <= 0, onclick: () => { setYear(ys2[i - 1]); render(); } }, ico('back')),
+          h('select', { 'aria-label': 'Year', onchange: (e) => { setYear(+e.target.value); render(); } }, ys2.map((y) => h('option', { value: y, selected: y === view.year ? 'selected' : null }, String(y)))),
+          h('button', { type: 'button', title: 'Next year', 'aria-label': 'Next year', disabled: i >= ys2.length - 1, onclick: () => { setYear(ys2[i + 1]); render(); } }, ico('next'))),
         h('div.fin-actions',
           h('button.fin-btn.solid', { type: 'button', onclick: () => editExpense(null, render) }, ico('plus'), 'Expense'),
           h('button.fin-btn.solid', { type: 'button', onclick: () => editIncome(null, render) }, ico('plus'), 'Income'),
@@ -200,7 +200,7 @@
     const sub = (cur, prev, upGood, extra) => h('span', change(cur, prev, upGood), (prev !== undefined && hasPrev && Number.isFinite(prev) && prev) ? ' ' + vs : '', extra || '');
 
     wrap.appendChild(h('section.fin-kpis',
-      kpi('Balance', money(s.balance, 0), h('span', `Profit ${pct(s.margin)} of income`), s.balance >= 0 ? '.hero' : '.hero.neg'),
+      kpi('Balance', money(s.balance, 0), h('span', s.income ? `Profit ${pct(s.margin)} of income` : 'No income yet'), s.balance >= 0 ? '.hero' : '.hero.neg'),
       kpi('Income', money(s.income, 0), sub(s.income, p && p.income, true)),
       kpi('Expenses', money(s.expense, 0), sub(s.expense, p && p.expense, false)),
       kpi('Hogs shipped', n(s.shipped), sub(s.shipped, p && p.shipped, true, hasPrev ? '' : 'Hog sales and cripples')),
@@ -213,13 +213,13 @@
         h('div.fin-legend', h('span', h('i', { style: { background: INCOME } }), 'Income'), h('span', h('i', { style: { background: EXPENSE } }), 'Expenses'))),
       monthChart(s.months));
     const catCard = h('section.fin-card',
-      h('div.fin-card-head', h('h2', 'Expense'), h('span.fin-muted', `${money(s.expense, 0)} in ${s.nExp} bills`)),
+      h('div.fin-card-head', h('h2', 'Expense'), h('span.fin-muted', `${money(s.expense, 0)} in ${s.nExp} bill${s.nExp === 1 ? '' : 's'}`)),
       barList(s.byCat.map((c) => ({ label: c.name, value: c.total, tag: c.feed ? 'feed' : '', onClick: () => { view.tab = 'exp'; view.exp = { month: '', cat: String(c.code), company: '', q: '' }; render(); } })), s.expense));
     const incCard = h('section.fin-card',
-      h('div.fin-card-head', h('h2', 'Income'), h('span.fin-muted', `${money(s.income, 0)} from ${s.nInc} cheques`)),
+      h('div.fin-card-head', h('h2', 'Income'), h('span.fin-muted', `${money(s.income, 0)} from ${s.nInc} cheque${s.nInc === 1 ? '' : 's'}`)),
       barList(Object.entries(STREAMS).map(([k, st]) => ({ label: st.label, value: s.streams[k].total, note: `${n(s.streams[k].head)} head`, onClick: () => { view.tab = 'inc'; view.stream = k; render(); } })).filter((x) => x.value), s.income),
       h('div.fin-mini-grid',
-        mini('Average $ / hog sold', money(s.hog.perHog)), mini('Average weight', n(s.hog.avgWt, 1) + ' kg'), mini('Average index', n(s.hog.index, 1)),
+        mini('Average $ / hog sold', money(s.hog.perHog)), mini('Average weight', Number.isFinite(s.hog.avgWt) ? n(s.hog.avgWt, 1) + ' kg' : ''), mini('Average index', n(s.hog.index, 1)),
         mini('Average price', s.hog.price ? money(s.hog.price, 3) + ' / kg' : ''), mini('Income / sow / year', s.sows ? money(s.incomePerSow, 0) : ''), mini('Hogs / sow / year', s.sows ? n(s.shippedPerSow, 1) : '')));
     wrap.append(chart, h('div.fin-two', catCard, incCard));
 
@@ -466,8 +466,8 @@
     item.addEventListener('change', () => {
       const prev = past.filter((x) => x.item.toLowerCase() === item.value.trim().toLowerCase() && x.id !== r.id).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
       if (!prev) { info.textContent = ''; return; }
-      if (!company.value) company.value = prev.company;
-      if (!unit.value) unit.value = prev.unit;
+      if (!company.value) company.value = prev.company || '';
+      if (!unit.value) unit.value = prev.unit || '';
       if (!cat.value && prev.cat) cat.value = String(prev.cat);
       info.textContent = `Last bought ${U.fmt(prev.date)}: ${n(prev.qty, prev.qty % 1 ? 3 : 0)} ${prev.unit} for ${money(prev.total)}${prev.qty ? ` (${money(prev.total / prev.qty, 3)} / ${prev.unit.toLowerCase()})` : ''} from ${prev.company}.`;
       calc();
@@ -488,17 +488,30 @@
       if (!cat.value) { ui().toast('Pick the expense type.', 'error'); cat.focus(); return true; }
       const out = { ...r, kind: 'exp', date: d, item: item.value.trim(), company: company.value.trim(), qty: num(qty.value), unit: unit.value.trim().toUpperCase(), total: Math.round(t * 100) / 100, cat: +cat.value, tag: tag.value.trim().toUpperCase() };
       if (note.value.trim()) out.note = note.value.trim(); else delete out.note;
+      const fresh = lastMonth(+d.slice(0, 4)) < 0;
       await S.store.saveFin(out);
-      followYear(d);
+      const moved = followYear(d, fresh);
       render();
-      ui().toast(`${isNew ? 'Added' : 'Saved'} ${out.item}: ${money(out.total)}.`, 'ok');
+      ui().toast(`${isNew ? 'Added' : 'Saved'} ${out.item}: ${money(out.total)}.${moved}`, 'ok');
       if (again) setTimeout(() => editExpense(null, render, { date: d }), 0);
       return false;
     }
     ui().modal({ title: isNew ? 'New expense' : 'Edit expense', width: 560, cls: 'fin-dlg', body: form, buttons: dialogFoot(isNew, save, isNew ? null : () => remove(r, `${r.item} (${money(r.total)})`, render)) });
   }
-  /** After saving a record of another year, show that year. */
-  function followYear(iso) { const y = +iso.slice(0, 4); if (y !== view.year) view.year = y; }
+  /** Show another year; month filters belong to the year they were picked in. */
+  function setYear(y) { view.year = y; view.exp.month = ''; view.inc.month = ''; }
+  /**
+   * After saving a record of another year, show that year. The first record of a year starts its page:
+   * the Overview of the new year opens. Returns a line for the toast, or ''.
+   */
+  function followYear(iso, fresh) {
+    const y = +iso.slice(0, 4);
+    if (y === view.year) return '';
+    setYear(y);
+    if (!fresh) return ` Showing ${y}.`;
+    view.tab = 'overview';
+    return ` Started ${y}: a new page for the year.`;
+  }
   async function remove(r, what, render) {
     const ok = await ui().confirmBox('Delete', `Delete ${what}?`, 'Delete');
     if (!ok) return true;
@@ -626,11 +639,12 @@
       for (const k of Object.keys(fields)) setOpt(k, stream.value === 'hogs' ? num(fields[k].value) : null);
       setOpt('outstanding', stream.value !== 'hogs' && outstanding.value.trim() ? outstanding.value.trim() : null);
       setOpt('note', note.value.trim() || null);
+      const fresh = lastMonth(+d.slice(0, 4)) < 0;
       await S.store.saveFin(out);
-      followYear(d);
+      const moved = followYear(d, fresh);
       if (view.tab === 'inc') view.stream = out.stream;
       render();
-      ui().toast(`${isNew ? 'Added' : 'Saved'} ${STREAMS[out.stream].one}: ${money(out.total)}.`, 'ok');
+      ui().toast(`${isNew ? 'Added' : 'Saved'} ${STREAMS[out.stream].one}: ${money(out.total)}.${moved}`, 'ok');
       if (again) setTimeout(() => editIncome(null, render, { date: d, stream: out.stream }), 0);
       return false;
     }
@@ -806,7 +820,7 @@ tr { break-inside: avoid; }
       <div class="fr-band"><div><small>SwineOS · Finance report</small><h1>Income &amp; Expenses ${y}</h1><p>${E(farm)}</p></div>
         <div class="fr-meta"><b>${E(period)}</b>Printed ${E(printed)}</div></div>
       <div class="fr-kpis">
-        ${kpi('Balance', money(s.balance, 0), `Profit ${pct(s.margin)} of income`, s.balance >= 0 ? 'hero' : 'hero neg')}
+        ${kpi('Balance', money(s.balance, 0), s.income ? `Profit ${pct(s.margin)} of income` : 'No income yet', s.balance >= 0 ? 'hero' : 'hero neg')}
         ${kpi('Income', money(s.income, 0), chg(s.income, p && p.income, true) || `${n(s.nInc)} cheques`)}
         ${kpi('Expenses', money(s.expense, 0), chg(s.expense, p && p.expense, false) || `${n(s.nExp)} bills`)}
         ${kpi('Hogs shipped', n(s.shipped), chg(s.shipped, p && p.shipped, true) || 'Hog sales and cripples')}
