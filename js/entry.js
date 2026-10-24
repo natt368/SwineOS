@@ -364,14 +364,73 @@
     return { animal: saved, errors: [], warnings };
   }
 
-  function openEventDialog(type, a, existing, done) {
-    const f = eventForm(type, a, existing);
-    const r = A(a);
-    const title = `${S.EVENTS[type].name}  –  ${a.id}  (${r.status}${r.parity ? ', parity ' + r.parity : ''})`;
-    ui().modal({ title, body: f.node, width: 520, buttons: [
-      { label: existing ? 'Save changes' : 'Save', primary: true, onClick: async () => { const res = await saveEvent(a, f.read(), existing && existing.eid); if (!res) return true; done && done(res); return false; } },
-      { label: 'Cancel' },
-    ] });
+  /** Values a "Save & next" carries to the next animal: date, the choice lists and the boar (numbers and remarks start empty). */
+  function carryOf(host) {
+    const c = {};
+    host.querySelectorAll('input[id], select[id]').forEach((el) => {
+      if (el.classList.contains('dt-native') || el.id === 'f-animal' || el.id === 'a-id') return;
+      if (el.tagName === 'SELECT' || el.classList.contains('dt') || ['f-boar', 'a-origin', 'a-line'].includes(el.id)) c[el.id] = el.value;
+    });
+    return c;
+  }
+  function applyCarry(host, c) {
+    for (const [id, v] of Object.entries(c || {})) {
+      const el = host.querySelector('#' + CSS.escape(id));
+      if (el && v !== undefined && v !== '' && !el.disabled) { el.value = v; el.dispatchEvent(new Event('change')); }
+    }
+  }
+
+  /**
+   * Event dialog. New events have an Animal ID box at the top (another ID switches the animal) and a "Save & next"
+   * button: it saves, then opens the dialog again for the next animal with the date, boar and choices kept.
+   */
+  function openEventDialog(type, a, existing, done, carry) {
+    const chain = carry !== undefined;
+    const host = h('div.ev-host');
+    let cur = null; let f = null;
+    const name = S.EVENTS[type].name;
+    const titleFor = (x) => (x ? `${name}  –  ${x.id}  (${A(x).status}${A(x).parity ? ', parity ' + A(x).parity : ''})` : `${name}  –  next animal`);
+    const idBox = existing ? null : ui().input('f-animal', a ? a.id : '', { autocomplete: 'off', spellcheck: 'false', maxlength: 20, placeholder: 'Type the animal ID', 'aria-label': 'Animal ID' });
+    let keep = carry;
+    function build(x) {
+      if (f) keep = carryOf(host); // what was typed so far goes on to the next animal shown
+      cur = x;
+      host.innerHTML = '';
+      if (!x) {
+        const id = idBox ? idBox.value.trim() : '';
+        f = null;
+        host.appendChild(h('p.hint.ev-none', id ? `No animal with ID ${id}.` : 'Type the ID of the next animal.'));
+      } else {
+        f = eventForm(type, x, existing);
+        host.appendChild(f.node);
+        // a farrowing goes in the sow's own crate, so its location is not carried over
+        applyCarry(host, type === 'farrow' && keep ? { ...keep, 'f-loc': undefined } : keep);
+      }
+      if (m) m.box.querySelector('.dlg-title span').textContent = titleFor(x);
+    }
+    let m = null;
+    if (idBox) idBox.addEventListener('input', U.debounce(() => { const x = S.store.findById(idBox.value.trim()); if (x !== cur || !x) build(x ? S.store.get(x.uid) || x : null); }, 150));
+    build(a ? S.store.get(a.uid) || a : null);
+    async function save() {
+      if (!cur || !f) { ui().toast(idBox && idBox.value.trim() ? `No animal with ID ${idBox.value.trim()}.` : 'Type the animal ID first.', 'error'); if (idBox) { idBox.focus(); idBox.select(); } return null; }
+      return saveEvent(cur, f.read(), existing && existing.eid);
+    }
+    const buttons = existing
+      ? [{ label: 'Save changes', primary: true, onClick: async () => { const res = await save(); if (!res) return true; done && done(res); return false; } }, { label: 'Cancel' }]
+      : [
+        { label: 'Save', primary: !chain, onClick: async () => { const res = await save(); if (!res) return true; done && done(res); return false; } },
+        { label: 'Save & next', primary: chain, title: 'Save, then enter the same event for the next animal', onClick: async () => {
+          const res = await save(); if (!res) return true;
+          const keep = carryOf(host);
+          done && done(res);
+          openEventDialog(type, null, null, done, keep);
+          return false;
+        } },
+        { label: 'Cancel' },
+      ];
+    m = ui().modal({ title: titleFor(cur), body: h('div', idBox ? h('div.form.ev-animal', ui().field('Animal ID', idBox)) : null, host), width: 520, buttons });
+    // the first dialog starts in the form (the animal is chosen already); "next" dialogs start in the ID box
+    if (!chain && idBox) setTimeout(() => { const fs = [...host.querySelectorAll('input:not(.dt):not(.dt-native):not([disabled]), select:not([disabled])')]; if (fs[0]) fs[0].focus(); }, 45);
   }
 
   /* ================= animal entry / details ================= */
@@ -432,25 +491,36 @@
     return { node, read };
   }
 
-  function openEntryDialog(id, done) {
+  function openEntryDialog(id, done, carry) {
+    const chain = carry !== undefined;
     const f = animalForm({ id }, true);
+    if (chain) setTimeout(() => applyCarry(f.node, carry), 0);
+    async function save() {
+      const v = f.read();
+      if (!v.id) { await ui().alertBox('Cannot save', 'Enter an ID.'); return null; }
+      const clash = S.store.findById(v.id);
+      if (clash && !A(clash).removed) { await ui().alertBox('Cannot save', `ID ${v.id} is already used by an active animal.`); return null; }
+      if (!v.arrivalDate && !v.entryDate) { await ui().alertBox('Cannot save', 'Enter an arrival or herd entry date.'); return null; }
+      if (!v.arrivalDate) v.arrivalDate = v.entryDate;
+      if (v.birthDate && v.arrivalDate && v.arrivalDate < v.birthDate) { await ui().alertBox('Cannot save', 'Arrival is before birth.'); return null; }
+      const a = await S.store.saveAnimal({ uid: U.uid(v.sex === 'M' ? 'b' : 's'), ...v, events: [] });
+      S.store.log(`Entered new ${v.sex === 'M' ? 'boar' : 'female'} ${v.id}`);
+      ui().toast(`${v.id} entered.`, 'ok');
+      return a;
+    }
     ui().modal({ title: 'Herd entry details (new)', body: f.node, width: 860, buttons: [
-      { label: 'Save', primary: true, onClick: async () => {
-        const v = f.read();
-        if (!v.id) { await ui().alertBox('Cannot save', 'Enter an ID.'); return true; }
-        const clash = S.store.findById(v.id);
-        if (clash && !A(clash).removed) { await ui().alertBox('Cannot save', `ID ${v.id} is already used by an active animal.`); return true; }
-        if (!v.arrivalDate && !v.entryDate) { await ui().alertBox('Cannot save', 'Enter an arrival or herd entry date.'); return true; }
-        if (!v.arrivalDate) v.arrivalDate = v.entryDate;
-        if (v.birthDate && v.arrivalDate && v.arrivalDate < v.birthDate) { await ui().alertBox('Cannot save', 'Arrival is before birth.'); return true; }
-        const a = await S.store.saveAnimal({ uid: U.uid(v.sex === 'M' ? 'b' : 's'), ...v, events: [] });
-        S.store.log(`Entered new ${v.sex === 'M' ? 'boar' : 'female'} ${v.id}`);
-        ui().toast(`${v.id} entered.`, 'ok');
+      { label: 'Save', primary: !chain, onClick: async () => { const a = await save(); if (!a) return true; done && done(a); return false; } },
+      { label: 'Save & next', primary: chain, onClick: async () => {
+        const a = await save(); if (!a) return true;
+        const keep = carryOf(f.node);
         done && done(a);
+        openEntryDialog('', done, keep);
         return false;
       } },
       { label: 'Cancel' },
     ] });
+    // "next" starts in the empty ID box
+    if (chain) setTimeout(() => { const el = f.node.querySelector('#a-id'); if (el) { el.focus(); el.select(); } }, 45);
   }
 
   function openDetails(a, done) {

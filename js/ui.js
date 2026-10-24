@@ -48,7 +48,7 @@
     const foot = h('div.dlg-foot');
     buttons.forEach((b) => {
       const el = h('button.wbtn' + (b.primary ? '.primary' : '') + (b.cls ? '.' + b.cls : ''), {
-        type: 'button',
+        type: 'button', title: b.title || null,
         onclick: async () => { const keep = b.onClick ? await b.onClick(close) : false; if (keep !== true && !b.manual) close(); },
       }, b.label);
       if (b.right) el.style.marginLeft = 'auto';

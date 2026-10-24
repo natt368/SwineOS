@@ -1021,3 +1021,8 @@ button { cursor: pointer; }
   .dm-head { flex-direction: column; align-items: flex-start; gap: 10px; }
   .ld-gear-l { display: none; }
 }
+
+/* Event dialogs: the animal the event is for (another ID switches the animal; "Save & next" starts here) */
+.ev-animal { margin-bottom: 6px; padding-bottom: 8px; border-bottom: 1px solid #c8cfdc; }
+.ev-animal #f-animal { background: #9cf59c; font-weight: 700; }
+.ev-none { padding: 10px 2px; }
