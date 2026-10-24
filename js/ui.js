@@ -321,7 +321,10 @@
   function printPreview(title, contentNode, opts = {}) {
     const body = h('div.print-sheet' + (opts.bare ? '.bare' : ''), opts.bare ? null : h('h2', title), opts.bare ? null : h('div.print-farm', `${S.store.settings.farmNumber} ${S.store.settings.farmName}  ·  printed ${U.fmt(U.today())}`), contentNode);
     const m = modal({ title: 'Preview – ' + title, body, width: 980, cls: 'preview', buttons: [
-      { label: 'Print', primary: true, manual: true, cls: 'print-btn', onClick: () => { document.body.classList.add('printing'); window.print(); setTimeout(() => document.body.classList.remove('printing'), 500); return true; } },
+      { label: 'Print', primary: true, manual: true, cls: 'print-btn', onClick: () => {
+        // sow cards print from a page of their own: two to a letter sheet, whatever the app's page settings
+        if (S.sowCard && body.querySelector('.pw-cards .pw') && S.sowCard.printFrame(body)) return true;
+        document.body.classList.add('printing'); window.print(); setTimeout(() => document.body.classList.remove('printing'), 500); return true; } },
       { label: 'Save as file', manual: true, onClick: () => {
         const css = 'body{font:12px Arial,sans-serif;margin:16px}table{border-collapse:collapse;margin:4px 0 12px}th,td{border:1px solid #999;padding:2px 6px;white-space:nowrap}th{background:#eee}h2{margin:0}h4{margin:12px 0 2px;color:#000080}.write{min-width:150px}.sowcard{border:2px solid #000;padding:8px;margin-bottom:12px;page-break-inside:avoid}.sc-line{border-bottom:1px solid #999;height:22px}.al-sec{page-break-inside:avoid}';
         const html = `<!doctype html><html><head><meta charset="utf-8"><title>${U.esc(title)}</title><style>${css}${opts.css || ''}</style></head><body>${body.outerHTML}</body></html>`;

@@ -373,7 +373,10 @@
         : ui().printPreview(`Sow cards (${list.length})`, h('div.cards', list.slice(0, 500).map((a) => printable(a, o)))));
       ui().modal({ title: 'Sow card', width: 460, body, buttons: [
         { label: 'Preview', primary: true, onClick: () => { const list = build(); if (!list.length) { ui().toast('No sows to print.'); return true; } preview(list); } },
-        { label: 'Print', cls: 'print-btn', onClick: () => { const list = build(); if (!list.length) return true; preview(list); setTimeout(() => { document.body.classList.add('printing'); window.print(); setTimeout(() => document.body.classList.remove('printing'), 500); }, 300); } },
+        { label: 'Print', cls: 'print-btn', onClick: () => {
+          const list = build(); if (!list.length) return true;
+          if (o.layout === 'pw') { printFrame(h('div.pw-cards', list.slice(0, 500).map((a) => card(a, o.data)))); return false; }
+          preview(list); setTimeout(() => { document.body.classList.add('printing'); window.print(); setTimeout(() => document.body.classList.remove('printing'), 500); }, 300); } },
         { label: 'Cancel' },
       ] });
     }
@@ -451,5 +454,33 @@
     return win;
   }
 
-  S.sowCard = { open, cardRows, card, printCardsPreview, PW_CSS };
+  /**
+   * Print sow cards two to a letter page from a page of their own, so the app's page settings, zoom and the
+   * printer's default margins cannot push the second card onto another sheet.
+   */
+  const PAGE_CSS = `
+@page { size: 8.5in 11in; margin: 0; }
+html, body { margin: 0; padding: 0; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.pw-page { width: 8.5in; height: 10.96in; box-sizing: border-box; padding: 0.42in 0.5in 0.4in; display: flex; flex-direction: column; justify-content: space-between; align-items: center;
+  overflow: hidden; break-after: page; page-break-after: always; }
+.pw-page:last-child { break-after: auto; page-break-after: auto; }
+.pw-page .pw { margin: 0 !important; break-after: auto !important; page-break-after: auto !important; }
+.pw-page.one { justify-content: flex-start; }
+@media screen { body { background: #8a8a8a; } .pw-page { background: #fff; margin: 12px auto; } }`;
+  function printFrame(root) {
+    const cards = [...root.querySelectorAll('.pw')];
+    if (!cards.length) return false;
+    const pages = [];
+    for (let i = 0; i < cards.length; i += 2) pages.push(`<div class="pw-page${cards[i + 1] ? '' : ' one'}">${cards[i].outerHTML}${cards[i + 1] ? cards[i + 1].outerHTML : ''}</div>`);
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Sow cards</title><style>${PW_CSS}${PAGE_CSS}</style></head><body>${pages.join('')}</body></html>`;
+    U.$$('iframe.pw-print-frame').forEach((f) => f.remove());
+    const frame = h('iframe.pw-print-frame', { title: 'Sow cards', 'aria-hidden': 'true', style: { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' } });
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument;
+    doc.open(); doc.write(html); doc.close();
+    setTimeout(() => { try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch (e) { ui().toast('Printing is not available here.', 'error'); } }, 250);
+    return true;
+  }
+
+  S.sowCard = { open, cardRows, card, printCardsPreview, printFrame, PW_CSS, PAGE_CSS };
 })(window.SOS);
