@@ -474,8 +474,10 @@
     });
     [qty, total, unit].forEach((x) => x.addEventListener('input', calc));
     calc();
-    const form = h('div.form.fin-form',
-      ui().field('Date', date), ui().field('Product', item), info, ui().field('Company', company),
+    let m = null;
+    const modes = isNew ? modeSwitch('one', () => { const d = date.value; m.close(); bulkExpenses(render, { date: d }); }) : null;
+    const form = h('div.form.fin-form.fin-big',
+      modes, ui().field('Date', date), ui().field('Product', item), info, ui().field('Company', company),
       h('div.fin-row2', ui().field('Quantity', qty), ui().field('Unit', unit)),
       h('div.fin-row2', ui().field('Total $', total), h('div.frow', h('span.flabel', 'Price'), per)),
       ui().field('Type', cat), ui().field('Type 2', tag, 'Optional second tag, e.g. RESPOND or SURGE'), ui().field('Note', note),
@@ -496,7 +498,153 @@
       if (again) setTimeout(() => editExpense(null, render, { date: d }), 0);
       return false;
     }
-    ui().modal({ title: isNew ? 'New expense' : 'Edit expense', width: 560, cls: 'fin-dlg', body: form, buttons: dialogFoot(isNew, save, isNew ? null : () => remove(r, `${r.item} (${money(r.total)})`, render)) });
+    m = ui().modal({ title: isNew ? 'New expense' : 'Edit expense', width: 720, cls: 'fin-dlg', body: form, buttons: dialogFoot(isNew, save, isNew ? null : () => remove(r, `${r.item} (${money(r.total)})`, render)) });
+  }
+
+  /** "One bill | Bulk add" switch at the top of the New expense dialog. */
+  function modeSwitch(on, toOther) {
+    const b = (k, label) => h('button.fin-mode-b' + (k === on ? '.on' : ''), { type: 'button', 'aria-pressed': k === on ? 'true' : 'false', onclick: k === on ? null : toOther }, label);
+    return h('div.fin-mode', { role: 'group', 'aria-label': 'How many bills' }, b('one', 'One bill'), b('bulk', 'Bulk add (several bills)'));
+  }
+
+  /**
+   * Bulk add expenses: a table of bills. A product bought before fills in its company, unit and type;
+   * an empty date takes the row above's; rows copied from Excel can be pasted in (Date, Product, Company,
+   * Quantity, Unit, Total, Type, Type 2, Note).
+   */
+  function bulkExpenses(render, preset) {
+    const past = S.store.fin().filter((x) => x.kind === 'exp');
+    const COLS = [
+      { k: 'date', label: 'Date', w: 138 }, { k: 'item', label: 'Product', w: 190, list: 'fb-items' }, { k: 'company', label: 'Company', w: 160, list: 'fb-companies' },
+      { k: 'qty', label: 'Quantity', w: 84, num: true }, { k: 'unit', label: 'Unit', w: 84, list: 'fb-units' }, { k: 'total', label: 'Total $', w: 104, num: true },
+      { k: 'cat', label: 'Type', w: 190 }, { k: 'tag', label: 'Type 2', w: 90, list: 'fb-tags' }, { k: 'note', label: 'Note', w: 150 },
+    ];
+    const catOpts = [['', 'Pick…'], ...cats().map((c) => [String(c.code), `${c.code} · ${c.name}`])];
+    const tbody = h('tbody');
+    const sum = h('div.fin-bulk-sum');
+    let firstDate = (preset && preset.date) || defaultDate();
+    function cell(row, c) {
+      let el;
+      if (c.k === 'date') el = ui().dateInput(null, '', { 'aria-label': 'Date', placeholder: tbody.rows.length ? 'same ↑' : 'Mmm/DD/YY' });
+      else if (c.k === 'cat') el = ui().select(null, catOpts, '', { 'aria-label': 'Type' });
+      else el = h('input', { autocomplete: 'off', 'aria-label': c.label, list: c.list || null, inputmode: c.num ? 'decimal' : null });
+      const box = el.classList && el.classList.contains('dt-wrap') ? el.querySelector('input.dt') : el;
+      box.dataset.k = c.k;
+      row.els[c.k] = c.k === 'date' ? box : el;
+      return h('td', el);
+    }
+    function addRow(vals = {}) {
+      const tr = h('tr'); tr.els = {};
+      COLS.forEach((c) => tr.appendChild(cell(tr, c)));
+      tr.appendChild(h('td.fin-bulk-x', h('button', { type: 'button', title: 'Remove this row', 'aria-label': 'Remove this row', onclick: () => { tr.remove(); if (!tbody.rows.length) addRow(); update(); } }, '✕')));
+      tbody.appendChild(tr);
+      for (const [k, v] of Object.entries(vals)) if (tr.els[k] && v !== undefined && v !== null) tr.els[k].value = v;
+      // a product bought before fills in its company, unit and type
+      tr.els.item.addEventListener('change', () => {
+        const name = tr.els.item.value.trim().toLowerCase();
+        const prev = past.filter((x) => (x.item || '').toLowerCase() === name).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+        if (!prev) return;
+        if (!tr.els.company.value) tr.els.company.value = prev.company || '';
+        if (!tr.els.unit.value) tr.els.unit.value = prev.unit || '';
+        if (!tr.els.cat.value && prev.cat) tr.els.cat.value = String(prev.cat);
+        update();
+      });
+      return tr;
+    }
+    const rows = () => [...tbody.rows];
+    const blank = (tr) => COLS.every((c) => c.k === 'date' || c.k === 'cat' || !String(tr.els[c.k].value || '').trim());
+    /** Rows read top to bottom; an empty date takes the row above's. */
+    function read() {
+      let lastD = firstDate;
+      return rows().map((tr) => {
+        const v = {}; COLS.forEach((c) => { v[c.k] = String(tr.els[c.k].value || '').trim(); });
+        if (blank(tr)) return { tr, skip: true };
+        const d = v.date || lastD; lastD = d;
+        const t = num(v.total);
+        const bad = [];
+        if (!d) bad.push('date'); if (!v.item) bad.push('item'); if (t === null) bad.push('total'); if (!v.cat) bad.push('cat');
+        const rec = { kind: 'exp', date: d, item: v.item, company: v.company, qty: num(v.qty), unit: v.unit.toUpperCase(), total: t === null ? null : Math.round(t * 100) / 100, cat: +v.cat || '', tag: v.tag.toUpperCase() };
+        if (v.note) rec.note = v.note;
+        return { tr, rec, bad };
+      });
+    }
+    function update() {
+      const list = read().filter((x) => !x.skip);
+      const ok = list.filter((x) => !x.bad.length);
+      sum.innerHTML = '';
+      sum.append(h('span', h('b', n(ok.length)), ok.length === 1 ? ' bill ready' : ' bills ready'), h('span', 'Total ', h('b', money(U.sum(ok.map((x) => x.rec.total)) || 0))));
+      if (list.length > ok.length) sum.append(h('span.fin-bulk-warn', `${list.length - ok.length} incomplete`));
+    }
+    tbody.addEventListener('input', U.debounce(update, 150));
+    tbody.addEventListener('change', update);
+    // Enter moves to the next cell (and makes a new row at the end of the table)
+    tbody.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || !['INPUT', 'SELECT'].includes(e.target.tagName)) return;
+      e.preventDefault(); e.stopPropagation();
+      const all = [...tbody.querySelectorAll('input:not(.dt-native), select')];
+      const i = all.indexOf(e.target);
+      if (i === all.length - 1) { const tr = addRow(); tr.els.date.focus(); } else if (i >= 0) { all[i + 1].focus(); if (all[i + 1].select) all[i + 1].select(); }
+    }, true);
+    // paste rows copied from Excel: they fill the table from the cell pasted into
+    tbody.addEventListener('paste', (e) => {
+      const text = (e.clipboardData || window.clipboardData).getData('text');
+      if (!text || (!text.includes('\t') && !text.includes('\n'))) return;
+      e.preventDefault();
+      const lines = text.replace(/\r/g, '').split('\n').filter((l) => l.trim());
+      let tr = e.target.closest('tr');
+      const startCol = COLS.findIndex((c) => c.k === e.target.dataset.k);
+      lines.forEach((line, li) => {
+        if (li > 0) tr = tr.nextElementSibling || addRow();
+        line.split('\t').forEach((val, j) => {
+          const c = COLS[startCol + j]; if (!c) return;
+          let v = val.trim();
+          if (c.k === 'date') v = U.parseDate(v) || '';
+          if (c.k === 'cat') { const code = parseInt(v, 10); const hit = cats().find((x) => x.code === code || x.name.toLowerCase() === v.toLowerCase()); v = hit ? String(hit.code) : ''; }
+          if (c.num) v = v.replace(/[$,\s]/g, '');
+          tr.els[c.k].value = v;
+        });
+      });
+      update();
+    });
+    for (let i = 0; i < 6; i++) addRow(i === 0 ? { date: firstDate } : {});
+    const table = h('table.fin-bulk', h('colgroup', COLS.map((c) => h('col', { style: { width: c.w + 'px' } })), h('col', { style: { width: '34px' } })),
+      h('thead', h('tr', COLS.map((c) => h('th', { class: c.num ? 'num' : null }, c.label)), h('th'))), tbody);
+    let m = null;
+    const body = h('div.fin-form.fin-big',
+      modeSwitch('bulk', () => { m.close(); editExpense(null, render, { date: firstDate }); }),
+      h('p.fin-hint', 'One bill per row. A product bought before fills in its company, unit and type. Leave the date empty to use the date of the row above. You can also copy rows from Excel and paste them here.'),
+      h('div.fin-bulk-wrap', table),
+      h('div.fin-bulk-bar', h('button.fin-btn', { type: 'button', onclick: () => { for (let i = 0; i < 5; i++) addRow(); } }, ico('plus'), 'Add 5 rows'), sum),
+      datalist('fb-items', past.map((x) => x.item)), datalist('fb-companies', past.map((x) => x.company)), datalist('fb-units', ['TON', 'KGS', 'BUSHELS', 'BOTTLES', 'EACH', 'ANIMALS', ...past.map((x) => x.unit)]), datalist('fb-tags', past.map((x) => x.tag)));
+    update();
+    async function saveAll() {
+      const list = read().filter((x) => !x.skip);
+      rows().forEach((tr) => tr.classList.remove('bad'));
+      if (!list.length) { ui().toast('Type at least one bill.', 'error'); return true; }
+      const bad = list.filter((x) => x.bad.length);
+      if (bad.length) {
+        bad.forEach((x) => { x.tr.classList.add('bad'); x.bad.forEach((k) => x.tr.els[k].classList.add('fin-bad')); });
+        const need = { date: 'date', item: 'product', total: 'total', cat: 'type' };
+        ui().toast(`${bad.length} ${bad.length === 1 ? 'row is' : 'rows are'} missing ${[...new Set(bad.flatMap((x) => x.bad))].map((k) => need[k]).join(', ')}.`, 'error');
+        const first = bad[0]; const el = first.tr.els[first.bad[0]]; if (el) el.focus();
+        return true;
+      }
+      const recs = list.map((x) => x.rec);
+      const years = [...new Set(recs.map((r) => +r.date.slice(0, 4)))];
+      const fresh = years.filter((y) => lastMonth(y) < 0);
+      await S.store.putFin(recs, []);
+      S.store.log(`Bulk added ${recs.length} expenses`);
+      const latest = recs.map((r) => r.date).sort().pop();
+      const moved = followYear(latest, fresh.includes(+latest.slice(0, 4)));
+      render();
+      ui().toast(`Added ${recs.length} ${recs.length === 1 ? 'expense' : 'expenses'}: ${money(U.sum(recs.map((r) => r.total)))}.${moved}`, 'ok');
+      return false;
+    }
+    m = ui().modal({ title: 'New expenses – bulk add', width: 1260, cls: 'fin-dlg.fin-dlg-bulk', body, buttons: [
+      { label: 'Save all', primary: true, onClick: saveAll },
+      { label: 'Cancel', right: true },
+    ] });
+    setTimeout(() => { const el = tbody.rows[0] && tbody.rows[0].els.item; if (el) el.focus(); }, 60);
   }
   /** Show another year; month filters belong to the year they were picked in. */
   function setYear(y) { view.year = y; view.exp.month = ''; view.inc.month = ''; }
