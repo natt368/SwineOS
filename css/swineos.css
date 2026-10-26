@@ -1040,6 +1040,7 @@ button { cursor: pointer; }
 .fin-dlg-bulk .dlg-body { max-height: 72vh; }
 .fin-bulk-wrap { overflow: auto; border: 2px solid #d5ddf5; border-radius: 12px; max-height: 52vh; }
 .fin-bulk { border-collapse: collapse; table-layout: fixed; min-width: 100%; }
+.fin-big .fin-bulk input:disabled { background: #eceff6 !important; border-color: #e1e5ef !important; }
 .fin-bulk th { position: sticky; top: 0; z-index: 1; background: var(--royal); color: #fff; font: 700 12px var(--bold); text-transform: uppercase; letter-spacing: .4px; text-align: left; padding: 8px 6px; }
 .fin-bulk th.num { text-align: right; }
 .fin-bulk td { padding: 3px; border-bottom: 1px solid #eef1f8; }
