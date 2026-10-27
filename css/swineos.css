@@ -784,6 +784,18 @@ button { cursor: pointer; }
 .fin-mini { background: var(--royal-soft); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
 .fin-mini span { color: #5a6482; font-size: 12px; }
 .fin-mini b { color: var(--royal); font: 800 17px var(--bold); font-variant-numeric: tabular-nums; }
+.fin-recs { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.fin-rec { display: flex; flex-direction: column; gap: 1px; text-align: left; border: 2px solid #d5ddf5; background: #fff; border-radius: 12px; padding: 10px 12px; color: #1f2a4a; cursor: pointer; }
+.fin-rec:hover { border-color: var(--royal); background: #f7f9ff; }
+.fin-rec:focus-visible { outline: 3px solid #9db4ff; outline-offset: 2px; }
+.fin-rec span { color: #5a6482; font-size: 12px; font-weight: 600; }
+.fin-rec b { color: var(--royal); font: 800 22px/1.1 var(--bold); }
+.fin-rec em { font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+.fin-rec small { color: #66708f; font-size: 11.5px; }
+.fin-hist tbody tr { cursor: pointer; }
+.fin-hist tbody tr:focus-visible td { background: #eef2fd; outline: 0; }
+.fin-hist td.yr { font-weight: 700; color: var(--royal); }
+@media (max-width: 640px) { .fin-recs { grid-template-columns: 1fr 1fr; gap: 8px; } .fin-rec b { font-size: 19px; } }
 
 .fin-table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
 .fin-table th { text-align: left; color: #5a6482; font-weight: 700; font-size: 12px; padding: 7px 10px; border-bottom: 2px solid #d5ddf5; white-space: nowrap; }
