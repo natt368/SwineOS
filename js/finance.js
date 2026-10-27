@@ -110,6 +110,14 @@
     return m;
   }
 
+  /** History chart type, 'bar' or 'line' (remembered in this browser). Pass a mode to set it. */
+  function histChart(mode) {
+    const KEY = 'swineos.histChart';
+    if (mode) { view.histChart = mode; try { localStorage.setItem(KEY, mode); } catch (e) { /* storage blocked */ } return mode; }
+    if (!view.histChart) { let saved = null; try { saved = localStorage.getItem(KEY); } catch (e) { /* storage blocked */ } view.histChart = saved === 'line' ? 'line' : 'bar'; }
+    return view.histChart;
+  }
+
   /** "History 2003–2026" for the header. */
   function historySpan() {
     const ys = years().filter((y) => lastMonth(y) >= 0);
@@ -128,6 +136,8 @@
     back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     next: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     search: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 15l5 5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+    bars: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M10 20V5M15 20v-7M20 20V8" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
+    lines: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5-6 5 3 8-9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="11" r="1.6" fill="currentColor"/><circle cx="13" cy="14" r="1.6" fill="currentColor"/></svg>',
     pencil: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M13 7l4 4" stroke="currentColor" stroke-width="2"/></svg>',
     phone: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h3l1.5 4-2 1.5a11 11 0 0 0 6 6l1.5-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 4.5 5.5a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
   };
@@ -275,10 +285,24 @@
       kpi('Profit / hog', money(T.balance / T.shipped), 'all years together'),
       kpi('Feed cost / hog', money(T.feed / T.shipped), 'all years together')));
 
+    // bars or lines: the switch redraws just the chart, and this computer remembers the choice
+    const graph = () => pairChart(rows, { mode: histChart(), label: (i, narrow) => (narrow ? `'${String(rows[i].y).slice(2)}` : String(rows[i].y)), title: (i) => `${rows[i].y}${partial(rows[i]) ? ` (${monthName(0)}–${monthName(rows[i].last)})` : ''}`, aria: 'Income and expenses by year' });
+    const legend = h('div.fin-legend');
+    const toggle = h('div.fin-toggle', { role: 'group', 'aria-label': 'Chart type' });
+    let plot = graph();
+    const paint = () => {
+      const mode = histChart();
+      legend.innerHTML = '';
+      legend.append(h('span', h('i' + (mode === 'line' ? '.ln' : ''), { style: { background: INCOME } }), 'Income'), h('span', h('i' + (mode === 'line' ? '.ln' : ''), { style: { background: EXPENSE } }), 'Expenses'));
+      toggle.innerHTML = '';
+      for (const [k, label, icon] of [['bar', 'Bar graph', 'bars'], ['line', 'Line graph', 'lines']]) {
+        toggle.appendChild(h('button' + (mode === k ? '.on' : ''), { type: 'button', 'aria-pressed': mode === k ? 'true' : 'false', title: `Show a ${label.toLowerCase()}`,
+          onclick: () => { if (histChart() === k) return; histChart(k); const next = graph(); plot.replaceWith(next); plot = next; paint(); } }, ico(icon), h('span', label)));
+      }
+    };
+    paint();
     const chart = h('section.fin-card.fin-chart-card',
-      h('div.fin-card-head', h('h2', 'Income and Expenses by year'),
-        h('div.fin-legend', h('span', h('i', { style: { background: INCOME } }), 'Income'), h('span', h('i', { style: { background: EXPENSE } }), 'Expenses'))),
-      pairChart(rows, { label: (i, narrow) => (narrow ? `'${String(rows[i].y).slice(2)}` : String(rows[i].y)), title: (i) => `${rows[i].y}${partial(rows[i]) ? ` (${monthName(0)}–${monthName(rows[i].last)})` : ''}`, aria: 'Income and expenses by year' }));
+      h('div.fin-card-head', h('h2', 'Income and Expenses by year'), h('div.fin-chart-tools', legend, toggle)), plot);
     wrap.appendChild(chart);
 
     // the barn's records: best and worst whole years
@@ -338,9 +362,11 @@
   }
   /**
    * Grouped bars of income and expenses, one group per item (a month or a year), with a hover card per group.
-   * Drawn at the box's own width so text stays readable. items: { income, expense, shipped, recs }.
+   * o.mode 'line' draws two lines instead of bars. Drawn at the box's own width so text stays readable.
+   * items: { income, expense, shipped, recs }.
    */
   function pairChart(items, o) {
+    const line = o.mode === 'line';
     const box = h('div.fin-chart');
     const tip = h('div.fin-tip', { hidden: true });
     let geo = null;
@@ -366,10 +392,19 @@
       items.forEach((m, i) => {
         const cx = pad.l + gw * i + gw / 2;
         svg += `<rect class="fc-hit" data-i="${i}" x="${pad.l + gw * i}" y="${pad.t}" width="${gw}" height="${ih}"/>`;
-        svg += bar(cx - bw - 1, m.income, INCOME) + bar(cx + 1, m.expense, EXPENSE);
+        if (!line) svg += bar(cx - bw - 1, m.income, INCOME) + bar(cx + 1, m.expense, EXPENSE);
         if (i % every === 0 || i === items.length - 1) svg += `<text x="${cx}" y="${H - 9}" text-anchor="middle" class="fc-ax">${U.esc(o.label(i, narrow))}</text>`;
       });
-      svg += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(0)}" y2="${y(0)}" class="fc-base"/></svg>`;
+      svg += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(0)}" y2="${y(0)}" class="fc-base"/>`;
+      if (line) {
+        // a line per series through the groups that have records, with a marker on each point
+        const pts = items.map((m, i) => (m.recs ? [pad.l + gw * i + gw / 2, m] : null)).filter(Boolean);
+        for (const [k, c] of [['expense', EXPENSE], ['income', INCOME]]) {
+          svg += `<polyline points="${pts.map(([x, m]) => `${x},${y(m[k])}`).join(' ')}" fill="none" stroke="${c}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" class="fc-line"/>`;
+          svg += pts.map(([x, m]) => `<circle cx="${x}" cy="${y(m[k])}" r="${narrow ? 3 : 4}" fill="${c}" class="fc-dot"/>`).join('');
+        }
+      }
+      svg += '</svg>';
       box.innerHTML = svg;
       tip.hidden = true;
       box.appendChild(tip);
