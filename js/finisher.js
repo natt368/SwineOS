@@ -146,6 +146,7 @@
       if (!d) { ui().toast('Type the date the pigs moved.', 'error'); date.focus(); return true; }
       if (!hd || hd < 0) { ui().toast('Type how many pigs moved.', 'error'); head.focus(); return true; }
       const out = { ...r, kind: 'move', date: d, head: Math.round(hd) };
+      if (!isNew) out.hand = true; // changed in SwineOS: a later Excel import leaves it alone
       const set = (k, v) => { if (v === '' || v === null || v === undefined) delete out[k]; else out[k] = v; };
       set('room', room.value.trim()); set('finRoom', finRoom.value.trim()); set('note', note.value.trim());
       await S.store.saveFin(out);
@@ -174,17 +175,24 @@
       status.innerHTML = '';
       if (!res.records.length) { status.append(h('p.fin-err', 'No moves were found. The workbook needs a sheet named MOVED TO FINISHER with MONTH, DATE and AMOUNT columns.')); return; }
       const total = U.sum(res.records.map((r) => r.head));
-      const replaced = moves().filter((r) => r.date.startsWith(String(res.year)));
+      // only moves from an earlier Excel import are replaced; moves typed or changed in SwineOS stay
+      const same = moves().filter((r) => r.date.startsWith(String(res.year)));
+      const imported = (r) => String(r.id || '').startsWith('x') && !r.hand;
+      const replaced = same.filter(imported);
+      const kept = same.filter((r) => !imported(r));
+      const keptIds = new Set(kept.map((r) => r.id));
+      const incoming = res.records.filter((r) => !keptIds.has(r.id));
       const replace = h('input', { type: 'checkbox', checked: true });
       status.append(
         h('p', h('b', file.name), `  ·  ${res.year}`),
         h('table.fin-table', h('tbody', h('tr', h('td', 'Moves to Finisher'), h('td.num', `${n(res.records.length)} groups`), h('td.num', `${n(total)} pigs`)))),
-        replaced.length ? h('label.fin-check', replace, ` Replace the ${n(replaced.length)} moves of ${res.year} already in SwineOS (recommended when importing an updated copy of the workbook)`) : null,
-        h('div.fin-import-go', h('button.fin-btn.solid', { type: 'button', onclick: go }, ico('upload'), `Import ${n(res.records.length)} moves`)));
+        replaced.length ? h('label.fin-check', replace, ` Replace the ${n(replaced.length)} moves of ${res.year} from an earlier Excel import (recommended, so nothing is counted twice)`) : null,
+        kept.length ? h('p.fin-hint', `${n(kept.length)} ${kept.length === 1 ? 'move' : 'moves'} of ${res.year} typed or changed in SwineOS ${kept.length === 1 ? 'stays' : 'stay'} as ${kept.length === 1 ? 'it is' : 'they are'}. If one of them is also a line in this workbook, delete one of the two after importing.`) : null,
+        h('div.fin-import-go', h('button.fin-btn.solid', { type: 'button', onclick: go }, ico('upload'), `Import ${n(incoming.length)} moves`)));
       async function go(e) {
         e.target.disabled = true;
-        await S.store.putFin(res.records, replaced.length && replace.checked ? replaced.map((r) => r.id) : []);
-        S.store.log(`Imported ${res.records.length} moves to Finisher from ${file.name}`);
+        await S.store.putFin(incoming, replaced.length && replace.checked ? replaced.map((r) => r.id) : []);
+        S.store.log(`Imported ${incoming.length} moves to Finisher from ${file.name}`);
         view.year = res.year; view.f = { month: '', q: '' };
         m.close();
         render();

@@ -572,6 +572,7 @@
       if (!cat.value) { ui().toast('Pick the expense type.', 'error'); cat.focus(); return true; }
       const out = { ...r, kind: 'exp', date: d, item: item.value.trim(), company: company.value.trim(), qty: num(qty.value), unit: unit.value.trim().toUpperCase(), total: Math.round(t * 100) / 100, cat: +cat.value, tag: tag.value.trim().toUpperCase() };
       if (note.value.trim()) out.note = note.value.trim(); else delete out.note;
+      if (!isNew) out.hand = true; // changed in SwineOS: a later Excel import leaves it alone
       const fresh = lastMonth(+d.slice(0, 4)) < 0;
       await S.store.saveFin(out);
       const moved = followYear(d, fresh);
@@ -929,6 +930,7 @@
       for (const k of Object.keys(fields)) setOpt(k, stream.value === 'hogs' ? num(fields[k].value) : null);
       setOpt('outstanding', stream.value !== 'hogs' && outstanding.value.trim() ? outstanding.value.trim() : null);
       setOpt('note', note.value.trim() || null);
+      if (!isNew) out.hand = true; // changed in SwineOS: a later Excel import leaves it alone
       const fresh = lastMonth(+d.slice(0, 4)) < 0;
       await S.store.saveFin(out);
       const moved = followYear(d, fresh);
@@ -1194,6 +1196,18 @@ tr { break-inside: avoid; }
     setTimeout(go, 300);
   }
 
+  /** What an import leaves alone: records typed in SwineOS, and imported lines changed in SwineOS since. */
+  function keptNote(kept, yrs) {
+    const typed = kept.filter((r) => !String(r.id || '').startsWith('x')); const changed = kept.length - typed.length;
+    const when = yrs.length > 1 ? 'these years' : String(yrs[0]);
+    const parts = [];
+    if (typed.length) parts.push(`${n(typed.length)} ${typed.length === 1 ? 'record' : 'records'} typed in SwineOS (${money(U.sum(typed.map((r) => r.total)))})`);
+    if (changed) parts.push(`${n(changed)} workbook ${changed === 1 ? 'line' : 'lines'} changed in SwineOS`);
+    return `Kept as ${kept.length === 1 ? 'it is' : 'they are'} for ${when}: ${parts.join(' and ')}.` + (typed.length ? ' If a typed record is also a line in this workbook, delete one of the two after importing.' : '');
+  }
+  /** A record that came from an Excel import and has not been changed in SwineOS since (ids from an import start with x). */
+  function fromImport(r) { return String(r.id || '').startsWith('x') && !r.hand; }
+
   /* ---------- Finance settings ---------- */
   function settingsDialog(render) {
     const fs = finSettings();
@@ -1256,19 +1270,25 @@ tr { break-inside: avoid; }
       const kinds = new Set(res.records.map((r) => r.kind + (r.stream || '')));
       const yrs = res.years && res.years.length ? res.years : [res.year];
       const span = yrs.length > 1 ? `${yrs[0]}–${yrs[yrs.length - 1]} (${yrs.length} years)` : String(yrs[0]);
-      const replaced = S.store.fin().filter((r) => kinds.has(r.kind + (r.stream || '')) && yrs.includes(+r.date.slice(0, 4)));
+      const same = S.store.fin().filter((r) => kinds.has(r.kind + (r.stream || '')) && yrs.includes(+r.date.slice(0, 4)));
+      // only records that came from an earlier Excel import are replaced; anything typed or changed in SwineOS stays
+      const replaced = same.filter(fromImport);
+      const kept = same.filter((r) => !fromImport(r));
+      const keptIds = new Set(kept.map((r) => r.id));
+      const incoming = res.records.filter((r) => !keptIds.has(r.id)); // a line changed by hand keeps the hand-made version
       const replace = h('input', { type: 'checkbox', checked: true });
       status.innerHTML = '';
       status.append(
         h('p', h('b', file.name), `  ·  ${span}`, res.farm ? `  ·  ${res.farm}` : '', res.sows && yrs.length === 1 ? `  ·  ${n(res.sows)} sows` : ''),
         h('table.fin-table', h('tbody', groups.map(([label, l]) => h('tr', h('td', label), h('td.num', `${n(l.length)} ${l.length === 1 ? 'record' : 'records'}`),
           h('td.num', money(U.sum(l.map((r) => r.total)))), h('td.num', l[0].kind === 'inc' ? `${n(U.sum(l.map((r) => r.head)))} head` : ''))))),
-        replaced.length ? h('label.fin-check', replace, ` Replace the ${n(replaced.length)} matching records already in SwineOS (recommended when importing an updated copy of the same workbook)`) : null,
-        h('div.fin-import-go', h('button.fin-btn.solid', { type: 'button', onclick: go }, ico('upload'), `Import ${n(res.records.length)} records`)));
+        replaced.length ? h('label.fin-check', replace, ` Replace the ${n(replaced.length)} records from earlier Excel imports of ${yrs.length > 1 ? 'these years' : yrs[0]} (recommended, so nothing is counted twice)`) : null,
+        kept.length ? h('p.fin-hint', keptNote(kept, yrs)) : null,
+        h('div.fin-import-go', h('button.fin-btn.solid', { type: 'button', onclick: go }, ico('upload'), `Import ${n(incoming.length)} records`)));
       async function go(e) {
         e.target.disabled = true;
         const removeIds = replaced.length && replace.checked ? replaced.map((r) => r.id) : [];
-        await S.store.putFin(res.records, removeIds);
+        await S.store.putFin(incoming, removeIds);
         // the workbook's expense types and number of sows
         const fs = finSettings();
         const known = new Set(fs.cats.map((c) => c.code));
