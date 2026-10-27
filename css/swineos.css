@@ -756,6 +756,15 @@ button { cursor: pointer; }
 
 .fin-legend { display: flex; gap: 16px; font-size: 13px; color: #33405f; }
 .fin-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.fin-legend i.ln { height: 3px; width: 16px; border-radius: 2px; }
+.fin-chart-tools { display: flex; align-items: center; gap: 10px 18px; flex-wrap: wrap; }
+.fin-toggle { display: inline-flex; background: var(--royal-soft); border-radius: 999px; padding: 3px; gap: 2px; }
+.fin-toggle button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--royal); border-radius: 999px; padding: 5px 12px; font: 700 13px var(--bold); }
+.fin-toggle button .fin-i { width: 16px; height: 16px; }
+.fin-toggle button:hover:not(.on) { background: #dfe6fb; }
+.fin-toggle button.on { background: var(--royal); color: #fff; box-shadow: 0 1px 4px rgba(29, 63, 174, .3); }
+.fin-toggle button:focus-visible { outline: 3px solid #9db4ff; outline-offset: 1px; }
+.fin-chart .fc-dot { stroke: #fff; stroke-width: 2; }
 .fin-legend i, .fin-tip i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 .fin-chart { position: relative; min-width: 0; overflow: hidden; }
 .fin-chart svg { display: block; overflow: visible; max-width: none; }
