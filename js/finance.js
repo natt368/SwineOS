@@ -110,6 +110,12 @@
     return m;
   }
 
+  /** "History 2003–2026" for the header. */
+  function historySpan() {
+    const ys = years().filter((y) => lastMonth(y) >= 0);
+    return ys.length ? `History ${ys[0]}${ys.length > 1 ? '–' + ys[ys.length - 1] : ''}` : 'History';
+  }
+
   /* ---------- window state ---------- */
   const view = { tab: 'overview', year: null, stream: 'hogs', exp: { month: '', cat: '', company: '', q: '' }, inc: { month: '', company: '', q: '' } };
 
@@ -143,19 +149,19 @@
       head.innerHTML = '';
       head.append(
         h('button.fin-home', { type: 'button', title: 'Back to the SwineOS start screen', onclick: () => S.app.landing() }, ico('back'), h('span', 'SwineOS')),
-        h('div.fin-titles', h('h1', 'Finances'), h('p', [S.store.settings.farmName, `Income and expenses ${view.year}`].filter(Boolean).join('  ·  '))),
-        h('div.fin-year', { role: 'group', 'aria-label': 'Year' },
+        h('div.fin-titles', h('h1', 'Finances'), h('p', [S.store.settings.farmName, view.tab === 'history' ? historySpan() : `Income and expenses ${view.year}`].filter(Boolean).join('  ·  '))),
+        view.tab === 'history' ? '' : h('div.fin-year', { role: 'group', 'aria-label': 'Year' },
           h('button', { type: 'button', title: 'Previous year', 'aria-label': 'Previous year', disabled: i <= 0, onclick: () => { setYear(ys2[i - 1]); render(); } }, ico('back')),
           h('select', { 'aria-label': 'Year', onchange: (e) => { setYear(+e.target.value); render(); } }, ys2.map((y) => h('option', { value: y, selected: y === view.year ? 'selected' : null }, String(y)))),
           h('button', { type: 'button', title: 'Next year', 'aria-label': 'Next year', disabled: i >= ys2.length - 1, onclick: () => { setYear(ys2[i + 1]); render(); } }, ico('next'))),
         h('div.fin-actions',
           h('button.fin-btn.solid', { type: 'button', onclick: () => bulkExpenses(render) }, ico('plus'), 'Expense'),
           h('button.fin-btn.solid', { type: 'button', onclick: () => bulkIncome(render) }, ico('plus'), 'Income'),
-          h('button.fin-btn.icon', { type: 'button', title: 'Print the finance report (or save it as a PDF)', 'aria-label': 'Print the finance report', onclick: () => printReport(view.year, view.tab, current) }, ico('print')),
+          h('button.fin-btn.icon', { type: 'button', title: 'Print the finance report (or save it as a PDF)', 'aria-label': 'Print the finance report', onclick: () => (view.tab === 'history' ? ui().printPreview(current.printTitle, current.printNode()) : printReport(view.year, view.tab, current)) }, ico('print')),
           h('button.fin-btn.icon', { type: 'button', title: 'Export to Excel (CSV)', 'aria-label': 'Export to Excel (CSV)', onclick: () => exportTab() }, ico('download')),
           h('button.fin-btn.icon', { type: 'button', title: 'Finance settings', 'aria-label': 'Finance settings', onclick: () => settingsDialog(render) }, ico('gear'))));
       tabs.innerHTML = '';
-      [['overview', 'Overview'], ['exp', 'Expenses'], ['inc', 'Income'], ['year', 'Year end']].forEach(([k, label]) => {
+      [['overview', 'Overview'], ['history', 'History'], ['exp', 'Expenses'], ['inc', 'Income'], ['year', 'Year end']].forEach(([k, label]) => {
         tabs.appendChild(h('button.fin-tab' + (view.tab === k ? '.on' : ''), { type: 'button', role: 'tab', 'aria-selected': view.tab === k ? 'true' : 'false', onclick: () => { view.tab = k; render(); main.scrollTop = 0; } }, label));
       });
       main.innerHTML = '';
@@ -244,6 +250,75 @@
   }
   function mini(label, value) { return h('div.fin-mini', h('span', label), h('b', value || '—')); }
 
+  /* ---------- History: every year on file, side by side ---------- */
+  function historyView(render) {
+    const wrap = h('div.fin-page');
+    const ys = years().filter((y) => lastMonth(y) >= 0);
+    if (!ys.length) { wrap.appendChild(emptyState(view.year, render)); return wrap; }
+    const rows = ys.map((y) => { const s = summarize(y); return { y, s, last: lastMonth(y), recs: s.nExp + s.nInc, income: s.income, expense: s.expense, shipped: s.shipped }; });
+    const sum = (f) => U.sum(rows.map((r) => f(r.s)));
+    const T = { income: sum((s) => s.income), expense: sum((s) => s.expense), shipped: sum((s) => s.shipped), feed: sum((s) => s.feedCost) };
+    T.balance = T.income - T.expense;
+    const span = ys.length > 1 ? `${ys[0]}–${ys[ys.length - 1]}` : String(ys[0]);
+    const partial = (r) => r.last < 11 && r.y >= +U.today().slice(0, 4);
+    const full = rows.filter((r) => !partial(r)); // records compare whole years only
+    const pick = (list, f, best) => list.filter((r) => Number.isFinite(f(r.s))).sort((a, b) => (best ? f(b.s) - f(a.s) : f(a.s) - f(b.s)))[0];
+    const best = pick(full, (s) => s.balance, true); const worst = pick(full, (s) => s.balance, false);
+    const goTo = (y) => { setYear(y); view.tab = 'overview'; render(); };
+
+    wrap.appendChild(h('section.fin-kpis',
+      kpi(`Balance ${span}`, money(T.balance, 0), h('span', `Profit ${pct(T.balance / T.income)} of income`), T.balance >= 0 ? '.hero' : '.hero.neg'),
+      kpi('Income', money(T.income, 0), `${ys.length} year${ys.length === 1 ? '' : 's'} on file`),
+      kpi('Expenses', money(T.expense, 0), `${money(T.feed, 0)} of it feed`),
+      kpi('Hogs shipped', n(T.shipped), `${n(T.shipped / ys.length)} a year on average`),
+      kpi('Profit / hog', money(T.balance / T.shipped), 'all years together'),
+      kpi('Feed cost / hog', money(T.feed / T.shipped), 'all years together')));
+
+    const chart = h('section.fin-card.fin-chart-card',
+      h('div.fin-card-head', h('h2', 'Income and Expenses by year'),
+        h('div.fin-legend', h('span', h('i', { style: { background: INCOME } }), 'Income'), h('span', h('i', { style: { background: EXPENSE } }), 'Expenses'))),
+      pairChart(rows, { label: (i, narrow) => (narrow ? `'${String(rows[i].y).slice(2)}` : String(rows[i].y)), title: (i) => `${rows[i].y}${partial(rows[i]) ? ` (${monthName(0)}–${monthName(rows[i].last)})` : ''}`, aria: 'Income and expenses by year' }));
+    wrap.appendChild(chart);
+
+    // the barn's records: best and worst whole years
+    const rec = (label, r, value, note) => (r ? h('button.fin-rec', { type: 'button', title: `Open ${r.y}`, onclick: () => goTo(r.y) }, h('span', label), h('b', String(r.y)), h('em', value), note ? h('small', note) : null) : null);
+    const most = pick(full, (s) => s.shipped, true); const topHog = pick(full, (s) => s.profitPerHog, true);
+    const lowFeed = pick(full.filter((r) => r.s.shipped), (s) => s.feedPerHog, false); const topInc = pick(full, (s) => s.income, true);
+    wrap.appendChild(h('section.fin-card',
+      h('div.fin-card-head', h('h2', 'Barn records'), h('span.fin-muted', full.length < rows.length ? 'Whole years only; click a year to open it' : 'Click a year to open it')),
+      h('div.fin-recs',
+        rec('Best year', best, money(best && best.s.balance, 0), 'balance'),
+        rec('Hardest year', worst, money(worst && worst.s.balance, 0), 'balance'),
+        rec('Most income', topInc, money(topInc && topInc.s.income, 0)),
+        rec('Most hogs shipped', most, n(most && most.s.shipped)),
+        rec('Best profit / hog', topHog, money(topHog && topHog.s.profitPerHog)),
+        rec('Lowest feed cost / hog', lowFeed, money(lowFeed && lowFeed.s.feedPerHog)))));
+
+    // year by year (the workbooks' REPORT figures)
+    const cols = [
+      ['Year', (r) => (r.y === 'Total' ? 'Total' : `${r.y}${partial(r) ? ` (to ${monthName(r.last)})` : ''}`)],
+      ['Sows', (r) => (r.s.sows ? n(r.s.sows) : '')], ['Hogs shipped', (r) => n(r.s.shipped)],
+      ['Income', (r) => money(r.s.income, 0)], ['Expenses', (r) => money(r.s.expense, 0)], ['Balance', (r) => money(r.s.balance, 0)], ['Profit', (r) => pct(r.s.margin)],
+      ['Income / hog', (r) => money(r.s.incomePerHog)], ['Cost / hog', (r) => money(r.s.costPerHog)], ['Profit / hog', (r) => money(r.s.profitPerHog)], ['Feed / hog', (r) => money(r.s.feedPerHog)],
+      ['Hogs / sow', (r) => (r.s.sows ? n(r.s.shippedPerSow, 1) : '')], ['Income / sow', (r) => (r.s.sows ? money(r.s.incomePerSow, 0) : '')], ['$ / hog sold', (r) => money(r.s.hog.perHog)], ['Avg index', (r) => n(r.s.hog.index, 1)],
+    ];
+    const per = (a, b) => (b ? a / b : NaN);
+    const tot = { y: 'Total', s: { sows: 0, shipped: T.shipped, income: T.income, expense: T.expense, balance: T.balance, margin: per(T.balance, T.income), incomePerHog: per(T.income, T.shipped), costPerHog: per(T.expense, T.shipped),
+      profitPerHog: per(T.balance, T.shipped), feedPerHog: per(T.feed, T.shipped), hog: { perHog: per(sum((s) => s.hog.total), sum((s) => s.hog.head)), index: NaN } } };
+    const list = [...rows].reverse();
+    const table = h('table.fin-table.fin-hist',
+      h('thead', h('tr', cols.map(([l], i) => h('th', { class: i ? 'num' : null }, l)))),
+      h('tbody', list.map((r) => h('tr', { tabindex: 0, title: `Open ${r.y}`, onclick: () => goTo(r.y), onkeydown: (e) => { if (e.key === 'Enter') goTo(r.y); } },
+        cols.map(([l, f], i) => h('td', { class: (i ? 'num' : 'yr') + ((l === 'Balance' || l === 'Profit / hog') && r.s.balance < 0 ? ' neg' : '') }, f(r)))))),
+      h('tfoot', h('tr', cols.map(([, f], i) => h('td', { class: i ? 'num' : null }, f(tot))))));
+    wrap.appendChild(h('section.fin-card', h('div.fin-card-head', h('h2', 'Year by year'), h('span.fin-muted', 'Hogs shipped = hog sales and cripples · click a year to open it')), h('div.fin-scroll', table)));
+    wrap.printNode = () => table.cloneNode(true);
+    wrap.printTitle = `Barn history ${span}`;
+    wrap.fileName = `finance-history-${span}`;
+    wrap.csv = () => U.csv([cols.map(([l]) => l), ...list.map((r) => cols.map(([, f]) => f(r))), cols.map(([, f]) => f(tot))]);
+    return wrap;
+  }
+
   function emptyState(y, render) {
     const has = S.store.fin().some((r) => MONEY.has(r.kind));
     return h('div.fin-empty',
@@ -256,8 +331,15 @@
         h('button.fin-btn', { type: 'button', onclick: () => bulkIncome(render) }, ico('plus'), 'Add income')));
   }
 
-  /** Grouped monthly bars (income and expenses), with a hover card per month. Drawn at the box's own width so text stays readable. */
+  /** Grouped monthly bars (income and expenses), with a hover card per month. */
   function monthChart(months) {
+    return pairChart(months, { label: (i, narrow) => (narrow ? monthName(i)[0] : monthName(i)), title: (i) => monthName(i) + ' ' + view.year, aria: 'Income and expenses by month' });
+  }
+  /**
+   * Grouped bars of income and expenses, one group per item (a month or a year), with a hover card per group.
+   * Drawn at the box's own width so text stays readable. items: { income, expense, shipped, recs }.
+   */
+  function pairChart(items, o) {
     const box = h('div.fin-chart');
     const tip = h('div.fin-tip', { hidden: true });
     let geo = null;
@@ -266,23 +348,25 @@
       const narrow = W < 560;
       const H = narrow ? 220 : 280; const pad = { l: narrow ? 46 : 60, r: 6, t: 12, b: 28 };
       const iw = W - pad.l - pad.r; const ih = H - pad.t - pad.b;
-      const max = Math.max(1, ...months.map((m) => Math.max(m.income, m.expense)));
+      const max = Math.max(1, ...items.map((m) => Math.max(m.income, m.expense)));
       const step = niceStep(max / 4); const top = Math.ceil(max / step) * step;
       const y = (v) => pad.t + ih - (v / top) * ih;
-      const gw = iw / 12; const bw = Math.max(3, Math.min(26, gw * 0.34));
+      const gw = iw / items.length; const bw = Math.max(2, Math.min(26, gw * 0.34));
       geo = { W, pad, gw };
       const bar = (x, v, c) => {
         if (!v) return '';
         const yt = y(v); const base = y(0); const r = Math.min(4, (base - yt) / 2, bw / 2);
         return `<path d="M${x} ${base}V${yt + r}Q${x} ${yt} ${x + r} ${yt}H${x + bw - r}Q${x + bw} ${yt} ${x + bw} ${yt + r}V${base}Z" fill="${c}"/>`;
       };
-      let svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Income and expenses by month">`;
+      let svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${U.esc(o.aria)}">`;
+      // too narrow to label every group: label every 2nd / 5th one
+      const every = gw >= 34 ? 1 : gw >= 17 ? 2 : 5;
       for (let v = 0; v <= top + 1e-9; v += step) svg += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}" class="fc-grid"/><text x="${pad.l - 8}" y="${y(v) + 4}" text-anchor="end" class="fc-ax">${short(v)}</text>`;
-      months.forEach((m, i) => {
+      items.forEach((m, i) => {
         const cx = pad.l + gw * i + gw / 2;
         svg += `<rect class="fc-hit" data-i="${i}" x="${pad.l + gw * i}" y="${pad.t}" width="${gw}" height="${ih}"/>`;
         svg += bar(cx - bw - 1, m.income, INCOME) + bar(cx + 1, m.expense, EXPENSE);
-        svg += `<text x="${cx}" y="${H - 9}" text-anchor="middle" class="fc-ax">${narrow ? monthName(i)[0] : monthName(i)}</text>`;
+        if (i % every === 0 || i === items.length - 1) svg += `<text x="${cx}" y="${H - 9}" text-anchor="middle" class="fc-ax">${U.esc(o.label(i, narrow))}</text>`;
       });
       svg += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(0)}" y2="${y(0)}" class="fc-base"/></svg>`;
       box.innerHTML = svg;
@@ -294,11 +378,11 @@
     ro.observe(box);
     draw(760);
     const show = (i) => {
-      const m = months[i];
+      const m = items[i];
       U.$$('.fc-hit', box).forEach((r) => r.classList.toggle('on', +r.dataset.i === i));
       if (!m.recs) { tip.hidden = true; return; }
       tip.innerHTML = '';
-      tip.append(h('b', monthName(i) + ' ' + view.year),
+      tip.append(h('b', o.title(i)),
         h('div', h('i', { style: { background: INCOME } }), 'Income', h('span', money(m.income, 0))),
         h('div', h('i', { style: { background: EXPENSE } }), 'Expenses', h('span', money(m.expense, 0))),
         h('div.sum', 'Balance', h('span', money(m.income - m.expense, 0))),
@@ -1168,13 +1252,15 @@ tr { break-inside: avoid; }
         ['Expenses', res.records.filter((r) => r.kind === 'exp')],
         ...Object.entries(STREAMS).map(([k, x]) => [x.label, res.records.filter((r) => r.stream === k)]),
       ].filter(([, l]) => l.length);
-      // records already here that this import stands in for: the same year's expenses / income streams
+      // records already here that this import stands in for: the same years' expenses / income streams
       const kinds = new Set(res.records.map((r) => r.kind + (r.stream || '')));
-      const replaced = S.store.fin().filter((r) => kinds.has(r.kind + (r.stream || '')) && r.date.startsWith(String(res.year)));
+      const yrs = res.years && res.years.length ? res.years : [res.year];
+      const span = yrs.length > 1 ? `${yrs[0]}–${yrs[yrs.length - 1]} (${yrs.length} years)` : String(yrs[0]);
+      const replaced = S.store.fin().filter((r) => kinds.has(r.kind + (r.stream || '')) && yrs.includes(+r.date.slice(0, 4)));
       const replace = h('input', { type: 'checkbox', checked: true });
       status.innerHTML = '';
       status.append(
-        h('p', h('b', file.name), `  ·  ${res.year}`, res.farm ? `  ·  ${res.farm}` : '', res.sows ? `  ·  ${n(res.sows)} sows` : ''),
+        h('p', h('b', file.name), `  ·  ${span}`, res.farm ? `  ·  ${res.farm}` : '', res.sows && yrs.length === 1 ? `  ·  ${n(res.sows)} sows` : ''),
         h('table.fin-table', h('tbody', groups.map(([label, l]) => h('tr', h('td', label), h('td.num', `${n(l.length)} ${l.length === 1 ? 'record' : 'records'}`),
           h('td.num', money(U.sum(l.map((r) => r.total)))), h('td.num', l[0].kind === 'inc' ? `${n(U.sum(l.map((r) => r.head)))} head` : ''))))),
         replaced.length ? h('label.fin-check', replace, ` Replace the ${n(replaced.length)} matching records already in SwineOS (recommended when importing an updated copy of the same workbook)`) : null,
@@ -1191,11 +1277,15 @@ tr { break-inside: avoid; }
         usedCodes.forEach((c) => extra.push({ code: c, name: `Type ${c}`, feed: false }));
         const patch = {};
         if (extra.length) patch.cats = [...fs.cats, ...extra];
-        if (res.sows && !fs.sows[res.year]) patch.sows = { ...fs.sows, [res.year]: res.sows };
+        // sows per year from the workbook, for years that have none set yet
+        const sows = { ...(res.sowsByYear || {}) }; if (res.sows && !sows[res.year]) sows[res.year] = res.sows;
+        const newSows = Object.entries(sows).filter(([y2, v]) => v && !fs.sows[y2]);
+        if (newSows.length) patch.sows = { ...fs.sows, ...Object.fromEntries(newSows) };
         if (Object.keys(patch).length) await saveFinSettings(patch);
         if (res.farm && (!S.store.settings.farmName || S.store.settings.farmName === S.DEFAULT_SETTINGS.farmName)) await S.store.saveSettings({ ...S.store.settings, farmName: res.farm });
         S.store.log(`Imported finance workbook ${file.name}: ${res.records.length} records`);
         view.year = res.year;
+        if (yrs.length > 1) view.tab = 'history';
         m.close();
         render();
         ui().toast(`Imported ${n(res.records.length)} records from ${file.name}.`, 'ok');
@@ -1203,7 +1293,7 @@ tr { break-inside: avoid; }
     }
   }
 
-  const VIEWS = { overview: overviewView, exp: expensesView, inc: incomeView, year: yearEndView };
+  const VIEWS = { overview: overviewView, history: historyView, exp: expensesView, inc: incomeView, year: yearEndView };
 
   S.finance = { open, summarize, reportHTML, importDialog: (done) => importDialog(done || (() => {})),
     // shared with the other royal blue screens (Moved to Finisher)
