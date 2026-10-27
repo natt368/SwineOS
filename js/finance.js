@@ -135,6 +135,7 @@
 
   /* ---------- the window ---------- */
   function open() {
+    view.tab = 'overview'; // Finances always opens on the Overview
     const ys = years();
     if (!view.year || !ys.includes(view.year)) view.year = [...ys].reverse().find((y) => lastMonth(y) >= 0) || ys[ys.length - 1];
     const win = ui().appWindow({ title: 'Finances', cls: 'fin-win', onClose: () => S.app.landing() });
@@ -1305,7 +1306,7 @@ tr { break-inside: avoid; }
         if (res.farm && (!S.store.settings.farmName || S.store.settings.farmName === S.DEFAULT_SETTINGS.farmName)) await S.store.saveSettings({ ...S.store.settings, farmName: res.farm });
         S.store.log(`Imported finance workbook ${file.name}: ${res.records.length} records`);
         view.year = res.year;
-        if (yrs.length > 1) view.tab = 'history';
+        view.tab = 'overview';
         m.close();
         render();
         ui().toast(`Imported ${n(res.records.length)} records from ${file.name}.`, 'ok');
