@@ -30,6 +30,22 @@
     return `${year}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   }
 
+  /**
+   * Record ids made from a line's contents (year, kind, date, product or company, amounts), so the same line gets the
+   * same id in a one-year workbook and in a combined one, whatever row it is on. Repeats of an identical line are
+   * numbered. Ids from an import start with x (lines typed in SwineOS do not).
+   */
+  function idMaker() {
+    const seen = {};
+    return (year, letter, ...parts) => {
+      let h1 = 0x811c9dc5;
+      for (const ch of parts.map((p) => String(p ?? '')).join('|')) { h1 ^= ch.charCodeAt(0); h1 = Math.imul(h1, 16777619) >>> 0; }
+      const base = `x${year}${letter}${h1.toString(36)}`;
+      seen[base] = (seen[base] || 0) + 1;
+      return seen[base] > 1 ? `${base}-${seen[base]}` : base;
+    };
+  }
+
   /** Header row (the one starting with MONTH) and a lookup from header text to column. */
   function header(rows, max = 40) {
     for (let r = 0; r < Math.min(rows.length, max); r++) {
@@ -123,14 +139,15 @@
     const y = titleYear(s) || year;
     const C = { y: col(hd, /^YEAR$/), m: hd.cols.MONTH, d: col(hd, /^DATE$/, /^DAY$/), item: col(hd, /^PRODUCT/, /^ITEM/), comp: col(hd, /^COMP/), qty: col(hd, /^AMOUNT$/, /^AMO/, /^QU/), unit: col(hd, /^UNIT$/),
       total: col(hd, /^TOTAL/), cat: col(hd, /^TYPE$/, /^CODE$/), tag: col(hd, /^TYPE#?2/) };
-    const out = [];
+    const out = []; const id = idMaker();
     for (let r = hd.row + 1; r < s.rows.length; r++) {
       const row = s.rows[r]; if (!row) continue;
       const m = month(at(row, C.m)); const item = str(at(row, C.item)); const total = num(at(row, C.total));
       if (!m || !item || total === null) continue;
       const ry = num(at(row, C.y)) || y; // a combined workbook gives each row its year
-      out.push({ id: `x${ry}e${r + 1}`, kind: 'exp', date: isoDate(ry, m, at(row, C.d)), item, company: str(at(row, C.comp)),
-        qty: round(num(at(row, C.qty)), 4), unit: str(at(row, C.unit)), total: round(total), cat: typeCode(at(row, C.cat)), tag: str(at(row, C.tag)) });
+      const rec = { kind: 'exp', date: isoDate(ry, m, at(row, C.d)), item, company: str(at(row, C.comp)),
+        qty: round(num(at(row, C.qty)), 4), unit: str(at(row, C.unit)), total: round(total), cat: typeCode(at(row, C.cat)), tag: str(at(row, C.tag)) };
+      out.push({ id: id(ry, 'e', rec.date, rec.item, rec.company, rec.qty, rec.unit, rec.total), ...rec });
     }
     return out;
   }
@@ -150,13 +167,15 @@
       const C = { y: col(hd, /^YEAR$/), m: hd.cols.MONTH, d: col(hd, /^DATE$/), comp: col(hd, /^COMP/), unit: col(hd, /^UNIT$/), head: col(hd, /^AMO/), total: col(hd, /^CHE/, /^TOTAL\$/),
         avgWt: col(hd, /^AVEWEI/, /^AVGWEI/), totalWt: col(hd, /^TOTALWEI/), index: col(hd, /^INDEX/), price: col(hd, /^PRICE/), fat: col(hd, /^FAT/), lean: col(hd, /^LEAN$/),
         bonus: col(hd, /^HEALTH/), leanInc: col(hd, /^LEANINC/), out: col(hd, /^OUTST/) };
+      const id = idMaker();
       for (let r = hd.row + 1; r < s.rows.length; r++) {
         const row = s.rows[r]; if (!row) continue;
         const m = month(at(row, C.m)); const head = num(at(row, C.head)); const total = num(at(row, C.total));
         if (!m || (head === null && total === null) || (!head && !total && !str(at(row, C.comp)))) continue;
         const ry = num(at(row, C.y)) || y;
-        const rec = { id: `x${ry}${st.id}${r + 1}`, kind: 'inc', stream: st.stream, date: isoDate(ry, m, at(row, C.d)), company: str(at(row, C.comp)), unit: str(at(row, C.unit)),
+        const rec = { kind: 'inc', stream: st.stream, date: isoDate(ry, m, at(row, C.d)), company: str(at(row, C.comp)), unit: str(at(row, C.unit)),
           head: head || 0, total: round(total || 0) };
+        rec.id = id(ry, st.id, rec.date, rec.company, rec.unit, rec.head, rec.total);
         const opt = { avgWt: 2, totalWt: 1, index: 2, price: 4, fat: 2, lean: 2, bonus: 4, leanInc: 4 };
         for (const [k, d] of Object.entries(opt)) { const v = num(at(row, C[k])); if (v !== null) rec[k] = round(v, d); }
         const o = str(at(row, C.out)); if (o) rec.outstanding = o;
@@ -202,12 +221,13 @@
     // ROOM # comes up to three times: the room the pigs left, then the finisher's room (DAYS and PEN # beside it)
     const rooms = row0.map((v, i) => (key(v).startsWith('ROOM') ? i : -1)).filter((i) => i >= 0);
     const C = { m: hd.cols.MONTH, d: col(hd, /^DATE$/), head: col(hd, /^AMOUNT$/, /^AMO/), days: col(hd, /^DAYS/), pen: col(hd, /^PEN/) };
-    const out = [];
+    const out = []; const id = idMaker();
     for (let r = hd.row + 1; r < s.rows.length; r++) {
       const row = s.rows[r]; if (!row) continue;
       const m = month(at(row, C.m)); const head = num(at(row, C.head));
       if (!m || !head) continue;
-      const rec = { id: `x${year}m${r + 1}`, kind: 'move', date: isoDate(year, m, at(row, C.d)), head };
+      const date = isoDate(year, m, at(row, C.d));
+      const rec = { id: id(year, 'm', date, head, str(at(row, rooms[0]))), kind: 'move', date, head };
       const room = str(at(row, rooms[0])); if (room) rec.room = room;
       const fin = [rooms[1], rooms[2]].map((c) => str(at(row, c))).filter(Boolean).join(' / '); if (fin) rec.finRoom = fin;
       const days = num(at(row, C.days)); if (days) rec.days = days;
