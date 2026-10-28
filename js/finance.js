@@ -138,6 +138,7 @@
     search: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 15l5 5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
     bars: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M10 20V5M15 20v-7M20 20V8" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
     lines: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5-6 5 3 8-9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="11" r="1.6" fill="currentColor"/><circle cx="13" cy="14" r="1.6" fill="currentColor"/></svg>',
+    calendar: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M3.5 10h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M13 14.5h4v3h-4z" fill="currentColor"/></svg>',
     pencil: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M13 7l4 4" stroke="currentColor" stroke-width="2"/></svg>',
     phone: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h3l1.5 4-2 1.5a11 11 0 0 0 6 6l1.5-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 4.5 5.5a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
   };
@@ -652,18 +653,23 @@
       tr.els[c.k] = box;
       return h('td', el);
     }
-    function addRow(vals = {}) {
+    /** opts.need: the boxes that make a row count (a filled-in month-end row is skipped while they are empty);
+     *  opts.hints: faint example text per box (e.g. last month's quantity). */
+    function addRow(vals = {}, opts = {}) {
       const tr = h('tr'); tr.els = {};
+      if (opts.need) { tr.need = opts.need; tr.classList.add('fin-bulk-pre'); }
       COLS.forEach((c) => tr.appendChild(cell(tr, c)));
       tr.appendChild(h('td.fin-bulk-x', h('button', { type: 'button', title: 'Remove this row', 'aria-label': 'Remove this row', tabindex: -1, onclick: () => { tr.remove(); if (!tbody.rows.length) addRow(); update(); } }, '✕')));
       tbody.appendChild(tr);
       for (const [k, v] of Object.entries(vals)) if (tr.els[k] && v !== undefined && v !== null) tr.els[k].value = v;
+      for (const [k, v] of Object.entries(opts.hints || {})) if (tr.els[k] && v) tr.els[k].placeholder = v;
       COLS.forEach((c) => tr.els[c.k].addEventListener('change', () => { if (cfg.onRow) cfg.onRow(tr, c.k); update(); }));
       if (cfg.onRow) cfg.onRow(tr, null);
       return tr;
     }
     const rows = () => [...tbody.rows];
-    const blank = (tr) => COLS.every((c) => c.k === 'date' || c.options || c.auto || !String(tr.els[c.k].value || '').trim()); // filled-in-for-you boxes do not count
+    const blank = (tr) => (tr.need ? tr.need.every((k) => !String(tr.els[k].value || '').trim()) // a filled-in row counts once its own boxes are typed
+      : COLS.every((c) => c.k === 'date' || c.options || c.auto || !String(tr.els[c.k].value || '').trim())); // filled-in-for-you boxes do not count
     function read() {
       let lastD = firstDate;
       return rows().map((tr) => {
@@ -717,7 +723,8 @@
     const body = h('div.fin-form.fin-big',
       h('p.fin-hint', cfg.hint),
       h('div.fin-bulk-wrap', table),
-      h('div.fin-bulk-bar', h('button.fin-btn', { type: 'button', onclick: () => { for (let i = 0; i < 5; i++) addRow({ ...(cfg.preset && cfg.preset.row) }); } }, ico('plus'), 'Add 5 rows'), sum),
+      h('div.fin-bulk-bar', h('button.fin-btn', { type: 'button', onclick: () => { for (let i = 0; i < 5; i++) addRow({ ...(cfg.preset && cfg.preset.row) }); } }, ico('plus'), 'Add 5 rows'),
+        (cfg.buttons || []).map((b) => h('button.fin-btn' + (b.cls ? '.' + b.cls : ''), { type: 'button', title: b.title || null, onclick: () => b.onClick({ addRow, rows, blank, update, tbody }) }, b.icon ? ico(b.icon) : null, b.label)), sum),
       cfg.lists);
     update();
     async function saveAll() {
@@ -757,15 +764,20 @@
     const catOpts = () => [['', 'Pick…'], ...cats().map((c) => [String(c.code), `${c.code} · ${c.name}`])];
     bulkDialog({
       title: 'New expenses', render, preset, firstKey: 'item', past,
-      hint: 'One bill per row. A product bought before fills in its company, unit and type. Leave the date empty to use the date of the row above. You can also copy rows from Excel and paste them here.',
+      hint: 'One bill per row. A product bought before fills in its company, unit and type. Quantity × $ / unit makes the total. Leave the date empty to use the date of the row above. You can also copy rows from Excel and paste them here. Month end fills in last month end\'s products: the faint numbers are what was paid then.',
       cols: [
-        { k: 'date', label: 'Date', w: 138 }, { k: 'item', label: 'Product', w: 190, list: 'fb-items' }, { k: 'company', label: 'Company', w: 160, list: 'fb-companies' },
-        { k: 'qty', label: 'Quantity', w: 84, num: true }, { k: 'unit', label: 'Unit', w: 84, list: 'fb-units' }, { k: 'total', label: 'Total $', w: 104, num: true },
-        { k: 'cat', label: 'Type', w: 190, options: catOpts, match: (v) => { const code = parseInt(v, 10); const hit = cats().find((x) => x.code === code || x.name.toLowerCase() === v.toLowerCase()); return hit ? String(hit.code) : ''; } },
-        { k: 'tag', label: 'Type 2', w: 90, list: 'fb-tags' }, { k: 'note', label: 'Note', w: 150 },
+        { k: 'date', label: 'Date', w: 138 }, { k: 'item', label: 'Product', w: 170, list: 'fb-items' }, { k: 'company', label: 'Company', w: 140, list: 'fb-companies' },
+        { k: 'qty', label: 'Quantity', w: 96, num: true }, { k: 'unit', label: 'Unit', w: 84, list: 'fb-units' },
+        { k: 'per', label: '$ / unit', w: 100, num: true, auto: true, tip: 'Quantity × $ / unit fills in the total' }, { k: 'total', label: 'Total $', w: 112, num: true },
+        { k: 'cat', label: 'Type', w: 170, options: catOpts, match: (v) => { const code = parseInt(v, 10); const hit = cats().find((x) => x.code === code || x.name.toLowerCase() === v.toLowerCase()); return hit ? String(hit.code) : ''; } },
+        { k: 'tag', label: 'Type 2', w: 90, list: 'fb-tags' }, { k: 'note', label: 'Note', w: 120 },
       ],
       lists: [datalist('fb-items', past.map((x) => x.item)), datalist('fb-companies', past.map((x) => x.company)), datalist('fb-units', ['TON', 'KGS', 'BUSHELS', 'BOTTLES', 'EACH', 'ANIMALS', ...past.map((x) => x.unit)]), datalist('fb-tags', past.map((x) => x.tag))],
       onRow: (tr, k) => {
+        // quantity × $ / unit makes the total; a typed total with a quantity gives the $ / unit
+        const q = num(tr.els.qty.value); const p = num(tr.els.per.value); const t = num(tr.els.total.value);
+        if ((k === 'qty' || k === 'per') && q && p !== null) tr.els.total.value = (Math.round(q * p * 100) / 100).toFixed(2);
+        else if (k === 'total' && q && t !== null) tr.els.per.value = String(+(t / q).toFixed(4));
         if (k !== 'item') return;
         const name = tr.els.item.value.trim().toLowerCase();
         const prev = past.filter((x) => (x.item || '').toLowerCase() === name).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
@@ -774,16 +786,53 @@
         if (!tr.els.unit.value) tr.els.unit.value = prev.unit || '';
         if (!tr.els.cat.value && prev.cat) tr.els.cat.value = String(prev.cat);
       },
-      need: { date: 'date', item: 'product', total: 'total', cat: 'type' },
+      need: { date: 'date', item: 'product', total: 'total', per: '$ / unit', cat: 'type' },
       toRec: (v, d) => {
-        const t = num(v.total); const bad = [];
-        if (!v.item) bad.push('item'); if (t === null) bad.push('total'); if (!v.cat) bad.push('cat');
+        const q = num(v.qty); const p = num(v.per);
+        const t = num(v.total) ?? (q && p !== null ? q * p : null); const bad = [];
+        if (!v.item) bad.push('item'); if (t === null) bad.push(p === null && q ? 'per' : 'total'); if (!v.cat) bad.push('cat');
         const rec = { kind: 'exp', date: d, item: v.item, company: v.company, qty: num(v.qty), unit: v.unit.toUpperCase(), total: t === null ? null : Math.round(t * 100) / 100, cat: +v.cat || '', tag: v.tag.toUpperCase() };
         if (v.note) rec.note = v.note;
         return { rec, bad };
       },
       saved: (recs) => `Added ${recs.length} ${recs.length === 1 ? 'expense' : 'expenses'}`,
+      buttons: [{ label: 'Month end', icon: 'calendar', cls: 'solid', title: 'Fill in the products of the last month end: type each quantity and $ / unit', onClick: (t) => fillMonthEnd(t, past) }],
     });
+  }
+
+  /**
+   * The month-end bills: the expenses dated on the last day of a month (feed, minerals, grain…), from the latest
+   * month end on file. Returns { date: that day, rows } or null.
+   */
+  function lastMonthEnd(past) {
+    const isEnd = (d) => U.addDays(d, 1).slice(8, 10) === '01';
+    const days = {};
+    for (const r of past) if (r.date && isEnd(r.date)) days[r.date] = (days[r.date] || 0) + 1;
+    const day = Object.keys(days).filter((d) => days[d] >= 3).sort().pop(); // a month end has several bills
+    if (!day) return null;
+    const rows = past.filter((r) => r.date === day).sort((a, b) => U.natCmp(a.item, b.item) || U.natCmp(a.tag || '', b.tag || ''));
+    return { date: day, rows };
+  }
+  /** Fill the new-expenses table with last month end's products, dated the next month end. */
+  function fillMonthEnd(t, past) {
+    const me = lastMonthEnd(past);
+    if (!me) { ui().toast('No month end found yet: once a month end is entered (several bills on the last day of a month), this button fills in its products.', 'error'); return; }
+    const endOf = (iso) => U.addDays(U.addMonths(`${iso.slice(0, 7)}-01`, 1), -1);
+    const thisEnd = endOf(U.today());
+    let date = endOf(U.addMonths(`${me.date.slice(0, 7)}-01`, 1)); // the month after the last month end
+    if (date > thisEnd) date = thisEnd;
+    t.rows().filter((tr) => !tr.need && t.blank(tr)).forEach((tr) => tr.remove()); // empty rows make way
+    const already = past.filter((r) => r.date === date).length;
+    me.rows.forEach((r, i) => {
+      const last = r.qty ? r.total / r.qty : null;
+      t.addRow({ date: i === 0 ? date : '', item: r.item, company: r.company || '', unit: r.unit || '', cat: r.cat ? String(r.cat) : '', tag: r.tag || '' }, {
+        need: ['qty', 'per', 'total'],
+        hints: { qty: r.qty ? n(r.qty, r.qty % 1 ? 3 : 0) : '', per: last !== null ? (last < 10 ? last.toFixed(3) : last.toFixed(2)) : '', total: n(r.total, 2) },
+      });
+    });
+    t.update();
+    const first = t.rows().find((tr) => tr.need); if (first) first.els.qty.focus();
+    ui().toast(`${me.rows.length} month-end products from ${U.fmt(me.date)}, dated ${U.fmt(date)}. Type each quantity and $ / unit; products left empty are not saved.${already ? ` Note: ${already} bills are already dated ${U.fmt(date)}.` : ''}`, already ? 'error' : 'ok');
   }
 
   /** New income: a table of cheques (hog sales, cripples, cull sows & boars). Hog-only columns are off for the others. */

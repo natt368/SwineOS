@@ -1106,3 +1106,7 @@ button { cursor: pointer; }
 .fin-bulk-sum { display: flex; gap: 18px; color: #33405f; margin-left: auto; }
 .fin-bulk-sum b { color: var(--royal); }
 .fin-bulk-warn { color: #c0392b; font-weight: 700; }
+
+/* month-end rows filled in for you: last month's figures show faintly until typed over */
+.fin-bulk tr.fin-bulk-pre td { background: #f7f9ff; }
+.fin-bulk tr.fin-bulk-pre input::placeholder { color: #9aa6c8; font-style: italic; }
