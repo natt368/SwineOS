@@ -157,8 +157,9 @@
     S.store.log(`Imported ${add.length} animals from CSV`);
     ui().toast(`${add.length} animals imported.`, 'ok');
   }
-  async function clearAll(prog) {
-    const ok = await ui().confirmBox('Clear all records', 'Delete every animal and event? Download a backup first if you may need them. Settings and code lists are kept.', 'Delete everything');
+  /** confirmed: the caller already asked (Data management asks for DELETE to be typed). */
+  async function clearAll(prog, confirmed) {
+    const ok = confirmed || await ui().confirmBox('Clear all records', 'Delete every animal and event? Download a backup first if you may need them. Settings and code lists are kept.', 'Delete everything');
     if (!ok) return;
     await S.store.replaceAll([], { ...S.store.settings, demo: false, lastEntryDate: '' }, progress(prog));
     S.model.resetCache();
