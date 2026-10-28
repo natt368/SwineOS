@@ -74,6 +74,8 @@ Piglets lost between farrowing and weaning that were never entered as deaths are
 
 ## Where the data is kept
 
+On the Data management page the imports are a row of small buttons (they are usually used once), and **Start over** (clear herd records / clear finance records) is a closed section at the bottom. Clearing says exactly what will be deleted, offers a backup file first, and only works after typing DELETE.
+
 - **Hosted on GitHub Pages or opened as a file:** records are stored in that browser on that computer (IndexedDB). Use *Data management (gear on the SwineOS home page) → Download backup file* regularly; the backup file can be restored on another computer.
 - **Opened as a claude.ai Artifact:** records are stored in the Artifact's shared online database, so every computer or phone that opens the link sees the same herd.
 

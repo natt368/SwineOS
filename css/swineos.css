@@ -1033,6 +1033,28 @@ button { cursor: pointer; }
 .dm-act.danger { border-color: #c0392b; color: #c0392b; }
 .dm-act.danger:hover { background: #fdecea; }
 .dm-prog:empty { display: none; }
+.dm-card.dm-small { padding: 12px 16px 14px; border-top-width: 3px; box-shadow: 0 2px 10px rgba(29, 63, 174, .08); }
+.dm-small-head { display: flex; align-items: baseline; gap: 6px 14px; flex-wrap: wrap; }
+.dm-small-head h2 { font-size: 16px; margin: 0; }
+.dm-small-head span { color: #66708f; font-size: 12.5px; }
+.dm-minis { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.dm-mini { position: relative; display: inline-flex; align-items: center; border: 1.5px solid var(--royal); background: #fff; color: var(--royal); border-radius: 999px;
+  padding: 5px 12px; font: 600 13px var(--ui); cursor: pointer; white-space: nowrap; }
+.dm-mini:hover, .dm-mini:focus-within { background: var(--royal-soft); }
+.dm-mini:focus-visible { outline: 3px solid #9db4ff; outline-offset: 2px; }
+.dm-mini input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.dm-mini.danger { border-color: #c0392b; color: #b0361f; }
+.dm-mini.danger:hover { background: #fdecea; }
+.dm-danger { align-self: flex-start; color: #66708f; font-size: 13px; padding: 2px 4px; }
+.dm-danger summary { cursor: pointer; color: #8a3b30; font-weight: 600; font-size: 13px; }
+.dm-danger[open] { background: #fff; border: 1px solid #f1c9c2; border-radius: 12px; padding: 10px 14px 12px; }
+.dm-danger p { margin: 8px 0 0; }
+.dm-guard p { margin: 0 0 10px; line-height: 1.45; }
+.dm-guard-what { color: #8a2a1f; }
+.dm-guard-type { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; font-size: 14px; }
+.dm-word { border: 2px solid #f1c9c2; border-radius: 10px; padding: 7px 10px; font: 700 15px var(--ui); letter-spacing: 1px; text-transform: uppercase; max-width: 220px; }
+.dm-word:focus { border-color: #c0392b; outline: 0; }
+.fin-dlg .wbtn.danger:disabled { opacity: .45; cursor: not-allowed; background: #fff; }
 .dm-prog { margin-top: 10px; font-weight: 700; color: var(--royal); }
 .dm-log { width: 100%; border-collapse: collapse; }
 .dm-log td { padding: 5px 8px; border-bottom: 1px solid #e3e8f6; vertical-align: top; }

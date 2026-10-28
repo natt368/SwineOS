@@ -12,6 +12,34 @@
   const action = (label, sub, onclick, cls = '') => h('button.dm-act' + cls, { type: 'button', onclick }, h('b', label), sub ? h('small', sub) : null);
   const fileAction = (label, sub, accept, onfile, cls = '') => h('label.dm-act' + cls, h('b', label), sub ? h('small', sub) : null,
     h('input', { type: 'file', accept, onchange: (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) onfile(f); } }));
+  // small buttons for the one-time imports and start over; the explanation is the hover tip
+  const mini = (label, tip, onclick, cls = '') => h('button.dm-mini' + cls, { type: 'button', title: tip, onclick }, label);
+  const miniFile = (label, tip, accept, onfile) => h('label.dm-mini', { title: tip }, label,
+    h('input', { type: 'file', accept, onchange: (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) onfile(f); } }));
+
+  /**
+   * Deleting records cannot be undone: say exactly what goes, offer a backup file first, and only allow the
+   * delete once DELETE has been typed. Resolves true when the person confirmed.
+   */
+  function guardedDelete({ title, what, keeps }) {
+    return new Promise((resolve) => {
+      let ok = false;
+      const word = h('input.dm-word', { type: 'text', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Type DELETE to confirm' });
+      const body = h('div.dm-guard',
+        h('p.dm-guard-what', h('b', 'This deletes '), what, '.'),
+        h('p', keeps, ' It cannot be undone: Google Drive backs up the emptied records too, so its next backups no longer hold them.'),
+        h('button.dm-mini', { type: 'button', onclick: () => { ui().saveFile(`swineos-backup-${U.today()}.json`, S.store.exportJSON(), 'application/json'); S.safety.markDownload(); } }, 'Download a backup file first'),
+        h('label.dm-guard-type', h('span', 'To delete, type ', h('b', 'DELETE'), ' in the box:'), word));
+      const m = ui().modal({ title, width: 480, cls: 'fin-dlg.dm-guard-dlg', body, onClose: () => resolve(ok), buttons: [
+        { label: 'Cancel', primary: true },
+        { label: 'Delete', cls: 'danger', right: true, onClick: () => { ok = true; } },
+      ] });
+      const del = m.box.querySelector('.wbtn.danger');
+      del.disabled = true;
+      word.addEventListener('input', () => { del.disabled = word.value.trim().toUpperCase() !== 'DELETE'; });
+      setTimeout(() => word.focus(), 40);
+    });
+  }
 
   function open() {
     const win = ui().appWindow({ title: 'Data management', cls: 'dm-win', onClose: () => S.app.landing() });
@@ -57,18 +85,22 @@
               h('div.dm-acts',
                 action('Download backup file', 'Save a copy to this computer', () => { ui().saveFile(`swineos-backup-${U.today()}.json`, S.store.exportJSON(), 'application/json'); S.safety.markDownload(); }),
                 fileAction('Restore backup file…', 'Replaces the records now in SwineOS', '.json,.gz,application/json,application/gzip,.bdr,.BDR', (f) => S.settingsUI.restore(f, prog)))))),
-        card('Import', null,
-          h('div.dm-acts.dm-acts3',
-            fileAction('PigWIN backup (.BDR)…', 'Herd records: every sow, boar and their history from PigWIN / PigLITTER. Replaces the herd now on file; finances are kept.', '.bdr,.BDR,.zip', (f) => S.settingsUI.importPigwin(f, prog)),
-            fileAction('Animals from CSV…', 'Herd records: adds new animals. Columns ID, Sex, Birth date, Arrival date, Entry date, Parity, Breed, Location.', '.csv,text/csv', (f) => S.settingsUI.importCsv(f, prog)),
-            action('Moved to Finisher…', 'Herd records: the MOVED TO FINISHER sheet of the Expense & Income workbook (.xls or .xlsx).', () => S.finisher.importDialog(render)),
-            action('Expense & Income workbook…', 'Finances: expenses, hog sales, cripples and cull sows & boars from the Excel workbook (.xls or .xlsx).', () => S.finance.importDialog(render))),
+        h('section.dm-card.dm-small',
+          h('div.dm-small-head', h('h2', 'Import'), h('span', 'Usually done once, when moving from PigWIN or Excel. Point at a button for what it reads.')),
+          h('div.dm-minis',
+            miniFile('PigWIN backup (.BDR)', 'Herd records: every sow, boar and their history from PigWIN / PigLITTER. Replaces the herd now on file; finances are kept.', '.bdr,.BDR,.zip', (f) => S.settingsUI.importPigwin(f, prog)),
+            miniFile('Animals (CSV)', 'Herd records: adds new animals. Columns ID, Sex, Birth date, Arrival date, Entry date, Parity, Breed, Location.', '.csv,text/csv', (f) => S.settingsUI.importCsv(f, prog)),
+            mini('Moved to Finisher (Excel)', 'Herd records: the MOVED TO FINISHER sheet of the Expense & Income workbook (.xls or .xlsx).', () => S.finisher.importDialog(render)),
+            mini('Expense & Income (Excel)', 'Finances: expenses, hog sales, cripples and cull sows & boars from the Excel workbook (.xls or .xlsx), one year or many.', () => S.finance.importDialog(render))),
           prog),
-        card('Start over', 'Download a backup file first if you may need the records again.',
-          h('div.dm-acts',
-            action('Clear herd records', 'Deletes every animal and event. Finances are kept.', () => S.settingsUI.clearAll(prog), '.danger'),
-            action('Clear finance records', 'Deletes every expense and income record. The herd is kept.', clearFinances, '.danger'))),
-        recentChanges());
+        recentChanges(),
+        // start over: tucked away at the bottom, closed, and every delete must be typed out
+        h('details.dm-danger',
+          h('summary', 'Start over…'),
+          h('p', 'Deletes records for good. Each one asks you to type DELETE first, and offers a backup file.'),
+          h('div.dm-minis',
+            mini('Clear herd records', 'Deletes every animal and event. Finances are kept.', clearHerd, '.danger'),
+            mini('Clear finance records', 'Deletes every expense and income record. The herd is kept.', clearFinances, '.danger'))));
     }
 
     function recentChanges() {
@@ -77,10 +109,23 @@
         log.length ? h('table.dm-log', h('tbody', log.map((e) => h('tr', h('td', U.fmtDT(e.t)), h('td', e.text))))) : h('p.hint', 'Nothing yet.'));
     }
 
+    async function clearHerd() {
+      const animals = S.store.animals();
+      if (!animals.length) { ui().toast('There are no herd records.'); return; }
+      const events = animals.reduce((n, a) => n + (a.events || []).length, 0);
+      const ok = await guardedDelete({ title: 'Clear herd records', what: `every animal and event: ${animals.length.toLocaleString('en-US')} ${animals.length === 1 ? 'animal' : 'animals'} with ${events.toLocaleString('en-US')} ${events === 1 ? 'event' : 'events'}`,
+        keeps: 'Finances, Moved to Finisher, settings and code lists are kept.' });
+      if (ok) await S.settingsUI.clearAll(prog, true);
+    }
+
     async function clearFinances() {
       const all = S.store.fin().filter((r) => r.kind === 'exp' || r.kind === 'inc');
       if (!all.length) { ui().toast('There are no finance records.'); return; }
-      const ok = await ui().confirmBox('Clear finance records', `Delete all ${all.length} finance records (expenses and income)? Download a backup first if you may need them. The herd records are kept.`, 'Delete finance records');
+      const yrs = [...new Set(all.map((r) => (r.date || '').slice(0, 4)).filter(Boolean))].sort();
+      const total = (k) => all.filter((r) => r.kind === k).length.toLocaleString('en-US');
+      const ok = await guardedDelete({ title: 'Clear finance records',
+        what: `every expense and income record: ${total('exp')} expenses and ${total('inc')} income records${yrs.length ? `, ${yrs[0]}${yrs.length > 1 ? '–' + yrs[yrs.length - 1] : ''}` : ''}`,
+        keeps: 'The herd records and Moved to Finisher are kept.' });
       if (!ok) return;
       await S.store.putFin([], all.map((r) => r.id));
       S.store.log(`Cleared ${all.length} finance records`);
