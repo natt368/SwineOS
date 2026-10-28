@@ -74,6 +74,8 @@ Piglets lost between farrowing and weaning that were never entered as deaths are
 
 ## Where the data is kept
 
+**Change history** (Data management): every import, restore, herd entry, finance entry, edit and deletion of the last two years (at least the last 1,500 changes whatever their age). Pick the From and To dates (or Last 30 days, Last 12 months, This year, Everything), the kind of change, or search the words; Download (CSV) saves what is shown. The history is kept in backup files and Google Drive backups, and a restore adds the backup's history to the one already here.
+
 On the Data management page, **Import or backup** is one row of small buttons: Download backup file, Restore backup file, and the imports (usually used once), and **Start over** (clear herd records / clear finance records) is a closed section at the bottom. Clearing says exactly what will be deleted, offers a backup file first, and only works after typing DELETE.
 
 - **Hosted on GitHub Pages or opened as a file:** records are stored in that browser on that computer (IndexedDB). Use *Data management (gear on the SwineOS home page) → Import or backup → Download backup file* regularly; the backup file can be restored on another computer.

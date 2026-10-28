@@ -99,10 +99,50 @@
             mini('Clear finance records', 'Deletes every expense and income record. The herd is kept.', clearFinances, '.danger'))));
     }
 
+    /** Change history: every change of the last two years, picked by dates, kind and words. */
     function recentChanges() {
-      const log = (S.store.state.log || []).slice(-25).reverse();
-      return card('Recent changes', 'Imports, restores, backups and other changes to the data.',
-        log.length ? h('table.dm-log', h('tbody', log.map((e) => h('tr', h('td', U.fmtDT(e.t)), h('td', e.text))))) : h('p.hint', 'Nothing yet.'));
+      const f = histView;
+      const all = S.store.state.log || [];
+      const box = h('div.dm-hist-list');
+      const count = h('span.dm-hist-count');
+      const from = ui().dateInput('dm-h-from', f.from, { 'aria-label': 'From' });
+      const to = ui().dateInput('dm-h-to', f.to, { 'aria-label': 'To' });
+      const kind = ui().select('dm-h-kind', [['', 'All changes'], ...KINDS.map(([k, label]) => [k, label])], f.kind, { 'aria-label': 'Kind of change' });
+      const q = h('input.dm-h-q', { type: 'search', placeholder: 'Search, e.g. a sow ID or SOYA', value: f.q, 'aria-label': 'Search the changes' });
+      const read = () => { f.from = from.value || ''; f.to = to.value || ''; f.kind = kind.value; f.q = q.value; f.shown = 200; update(); };
+      from.addEventListener('change', read); to.addEventListener('change', read); kind.addEventListener('change', read); q.addEventListener('input', U.debounce(read, 200));
+      const quick = (label, days) => h('button.dm-mini', { type: 'button', onclick: () => {
+        const t = U.today();
+        f.to = t; f.from = days === 'year' ? `${t.slice(0, 4)}-01-01` : days ? U.addDays(t, -days) : '';
+        from.value = f.from; to.value = f.to; f.shown = 200; update();
+      } }, label);
+      function rows() {
+        const words = f.q.trim().toLowerCase();
+        return all.filter((e) => { const day = toDay(e.t);
+          return (!f.from || day >= f.from) && (!f.to || day <= f.to) && (!f.kind || kindOf(e.text) === f.kind) && (!words || e.text.toLowerCase().includes(words)); }).reverse();
+      }
+      function update() {
+        const list = rows();
+        box.innerHTML = '';
+        const oldest = all.length ? toDay(all[0].t) : '';
+        count.textContent = `${list.length.toLocaleString('en-US')} ${list.length === 1 ? 'change' : 'changes'}${oldest ? ` · history kept from ${U.fmt(oldest)}` : ''}`;
+        if (!list.length) { box.appendChild(h('p.hint', all.length ? 'No changes match. Widen the dates or clear the search.' : 'Nothing yet.')); return; }
+        const label = Object.fromEntries(KINDS);
+        box.appendChild(h('table.dm-log', h('tbody', list.slice(0, f.shown).map((e) => { const k = kindOf(e.text);
+          return h('tr', h('td', U.fmtDT(e.t)), h('td', h('span.dm-kind.k-' + k, label[k])), h('td', e.text)); }))));
+        if (list.length > f.shown) box.appendChild(h('button.dm-mini.dm-more', { type: 'button', onclick: () => { f.shown += 500; update(); } }, `Show more (${(list.length - f.shown).toLocaleString('en-US')} older)`));
+      }
+      update();
+      const csv = () => ui().saveFile(`swineos-change-history-${U.today()}.csv`, U.csv([['Date', 'Time', 'Kind', 'Change'], ...rows().map((e) => { const dt = new Date(e.t);
+        return [toDay(e.t), dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }), Object.fromEntries(KINDS)[kindOf(e.text)], e.text]; })]), 'text/csv');
+      return h('section.dm-card',
+        h('div.dm-hist-head', h('h2', 'Change history'), count),
+        h('p.dm-sub', 'Every import, restore, entry, edit and deletion of the last two years. Pick the dates, the kind of change, or search.'),
+        h('div.dm-hist-filters',
+          h('label', h('span', 'From'), from), h('label', h('span', 'To'), to), h('label', h('span', 'Kind'), kind), h('label.dm-h-search', h('span', 'Search'), q)),
+        h('div.dm-minis', quick('Last 30 days', 30), quick('Last 12 months', 365), quick('This year', 'year'), quick('Everything', 0),
+          h('span.dm-sep', { 'aria-hidden': 'true' }), h('button.dm-mini', { type: 'button', onclick: csv, title: 'Save the changes shown as a CSV file for Excel' }, 'Download (CSV)')),
+        box);
     }
 
     async function clearHerd() {
@@ -133,6 +173,24 @@
     win.refresh = render;
     return win;
   }
+
+  /* the change history's filters stay while the page is open; it opens on the last 30 days */
+  const histView = { from: '', to: '', kind: '', q: '', shown: 200 };
+  (function () { const t = S.U.today(); histView.to = t; histView.from = S.U.addDays(t, -30); })();
+  /** Kinds of change, from the wording of each log line. */
+  const KINDS = [['herd', 'Herd entry'], ['finance', 'Finances'], ['import', 'Import'], ['backup', 'Backup / restore'], ['delete', 'Deleted'], ['settings', 'Settings'], ['other', 'Other']];
+  function kindOf(text) {
+    const t = String(text || '');
+    if (/^Imported/.test(t)) return 'import';
+    if (/^(Restored|Loaded)|backup/i.test(t)) return 'backup';
+    if (/^(Cleared|Deleted)/.test(t)) return 'delete';
+    if (/settings/i.test(t)) return 'settings';
+    if (/expense|income|hog sale|cripple|cull sale|move to Finisher|finance/i.test(t)) return 'finance';
+    if (/^(Entered|Edited|Action list entry)/.test(t)) return 'herd';
+    return 'other';
+  }
+  /** A log time (ISO, UTC) -> the day on this computer's calendar. */
+  function toDay(t) { const d = new Date(t); return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-'); }
 
   /** The gear on the landing page. */
   const gear = () => h('button.ld-gear.win-end', { type: 'button', title: 'Data management: backups, Google Drive, imports', 'aria-label': 'Data management', onclick: () => S.app.dataMgmt() },
