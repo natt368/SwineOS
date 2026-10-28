@@ -23,6 +23,22 @@
     tombs: { a: {}, e: {}, f: {} },
     replacedAt: '',
   };
+  /*
+   * Change log: every entry of the last two years is kept (at least the last 1,500 whatever their age), so a year of
+   * changes can always be looked back on. A herd entering every event writes a few hundred a week.
+   */
+  const LOG_DAYS = 730; const LOG_MIN = 1500; const LOG_MAX = 150000;
+  function pruneLog(list) {
+    const cut = new Date(Date.now() - LOG_DAYS * 86400000).toISOString();
+    const from = Math.max(0, list.length - LOG_MIN);
+    return list.filter((e, i) => e && (i >= from || e.t >= cut)).slice(-LOG_MAX);
+  }
+  /** Two logs combined: each entry once, oldest first. */
+  function joinLogs(a, b) {
+    const seen = new Set();
+    return [...(a || []), ...(b || [])].filter((x) => { if (!x || !x.t) return false; const k = x.t + x.text; if (seen.has(k)) return false; seen.add(k); return true; })
+      .sort((x, y) => (x.t < y.t ? -1 : x.t > y.t ? 1 : 0));
+  }
   const listeners = new Set();
   const changeListeners = new Set(); // user changes only (not loads)
   // where saving stands, for the "data is safe" badge
@@ -90,7 +106,7 @@
     state.settings = mergeSettings(raw && raw.settings);
     state.animals = new Map();
     ((raw && raw.animals) || []).forEach((a) => state.animals.set(a.uid, a));
-    state.log = (raw && raw.log) || [];
+    state.log = pruneLog((raw && raw.log) || []);
     state.savedAt = (raw && raw.savedAt) || '';
     state.tombs = { f: {}, ...((raw && raw.tombs) || { a: {}, e: {} }) };
     state.replacedAt = (raw && raw.replacedAt) || '';
@@ -98,7 +114,7 @@
   }
   function saveLocal() { saveState.localPending = true; saveNotify(); saveLocalNow(); }
   const saveLocalNow = U.debounce(async () => {
-    const data = { savedAt: state.savedAt, settings: state.settings, animals: [...state.animals.values()], fin: [...state.fin.values()], log: state.log.slice(-2000), tombs: state.tombs, replacedAt: state.replacedAt };
+    const data = { savedAt: state.savedAt, settings: state.settings, animals: [...state.animals.values()], fin: [...state.fin.values()], log: state.log, tombs: state.tombs, replacedAt: state.replacedAt };
     try {
       await idbPut(LS_KEY, data);
       try { localStorage.removeItem(LS_KEY); } catch (e) { /* ignore */ }
@@ -178,7 +194,12 @@
       }, (e) => { console.warn(e); state.settings = mergeSettings(null); gotS = true; check(); });
       setTimeout(() => { if (first) { first = false; if (!state.settings) state.settings = mergeSettings(null); resolve(); } }, 15000);
     });
-    db.doc('meta/log').onSnapshot((snap) => { state.log = (snap.exists && snap.data().entries) || []; });
+    // the change log is kept per month (log/2026-10 …), so a save only rewrites this month's entries;
+    // meta/log holds the entries written before that
+    let legacy = []; let months = [];
+    const combine = () => { state.log = pruneLog(joinLogs(legacy, months)); };
+    db.doc('meta/log').onSnapshot((snap) => { legacy = (snap.exists && snap.data().entries) || []; combine(); });
+    db.collection('log').onSnapshot((snap) => { months = snap.docs.flatMap((d) => (d.data() && d.data().entries) || []); combine(); }, (e) => console.warn(e));
     return true;
   }
 
@@ -266,9 +287,10 @@
     },
     async log(text) {
       const entry = { t: new Date().toISOString(), text };
-      state.log = [...state.log, entry].slice(-1500);
+      state.log = pruneLog([...state.log, entry]);
       if (state.backend === 'cloud') {
-        try { await db.doc('meta/log').set({ entries: state.log }); } catch (e) { /* log is best effort */ }
+        const month = entry.t.slice(0, 7);
+        try { await db.collection('log').doc(month).set({ entries: state.log.filter((e) => e.t.startsWith(month)) }); } catch (e) { /* log is best effort */ }
       } else saveLocal();
     },
     /** Replace the whole herd (restore backup / PigWIN import / clear). */
@@ -287,7 +309,8 @@
         state.tombs = { ...(opts.tombs || { a: {}, e: {} }), f: fin ? { ...((opts.tombs || {}).f || {}) } : state.tombs.f || {} };
         state.replacedAt = opts.replacedAt !== undefined ? opts.replacedAt : opts.savedAt ? '' : new Date().toISOString();
       }
-      if (opts.log) state.log = opts.log;
+      // the change history is kept through a restore or import: the backup's entries join the ones here
+      if (opts.log) state.log = pruneLog(joinLogs(state.log, opts.log));
       notify();
       if (state.backend === 'cloud') {
         const keep = new Set(animals.map((a) => a.uid));
@@ -347,7 +370,7 @@
       return out;
     },
     exportJSON(compact) {
-      return JSON.stringify({ app: 'SwineOS', version: 1, exported: new Date().toISOString(), savedAt: state.savedAt, settings: state.settings, animals: [...state.animals.values()], fin: [...state.fin.values()], log: state.log.slice(-1500), tombs: state.tombs, replacedAt: state.replacedAt }, null, compact ? 0 : 1);
+      return JSON.stringify({ app: 'SwineOS', version: 1, exported: new Date().toISOString(), savedAt: state.savedAt, settings: state.settings, animals: [...state.animals.values()], fin: [...state.fin.values()], log: state.log, tombs: state.tombs, replacedAt: state.replacedAt }, null, compact ? 0 : 1);
     },
     /**
      * Combine a backup made on another computer with the records here, so nothing entered on either is lost.
@@ -362,7 +385,7 @@
       // finance records are combined one by one whatever happened to the herd (a herd import does not touch them)
       const F = mergeFin(remote);
       if (R.replacedAt && R.replacedAt > L.savedAt) {
-        await Store.replaceAll(remote.animals, remote.settings, null, { savedAt: remote.savedAt || new Date().toISOString(), log: remote.log, tombs: { ...remote.tombs, f: F.tombs }, replacedAt: remote.replacedAt, fin: F.list });
+        await Store.replaceAll(remote.animals, remote.settings, null, { savedAt: remote.savedAt || new Date().toISOString(), log: joinLogs(state.log, remote.log), tombs: { ...remote.tombs, f: F.tombs }, replacedAt: remote.replacedAt, fin: F.list });
         return { mode: 'remote', fromRemote: remote.animals.length, fromLocal: 0, finFromRemote: F.fromRemote };
       }
       if (L.replacedAt && L.replacedAt > R.savedAt) {
@@ -397,7 +420,7 @@
         out.push(m);
       }
       const settings = R.savedAt > L.savedAt ? remote.settings : state.settings;
-      const seen = new Set(); const log = [...(state.log || []), ...(remote.log || [])].filter((x) => { const k = x.t + x.text; if (seen.has(k)) return false; seen.add(k); return true; }).sort((x, y) => (x.t < y.t ? -1 : 1)).slice(-1500);
+      const log = pruneLog(joinLogs(state.log, remote.log));
       if (fromRemote || F.fromRemote || R.savedAt > L.savedAt) {
         await Store.replaceAll(out, settings, null, { savedAt: R.savedAt > L.savedAt ? R.savedAt : L.savedAt, log, tombs, replacedAt: L.replacedAt > R.replacedAt ? L.replacedAt : R.replacedAt, fin: F.list });
       } else { state.tombs = tombs; saveLocal(); }

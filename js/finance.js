@@ -623,6 +623,7 @@
       await S.store.saveFin(out);
       const moved = followYear(d, fresh);
       render();
+      S.store.log(`${isNew ? 'Added' : 'Edited'} expense ${out.item}${out.company ? ' from ' + out.company : ''}: ${money(out.total)}, dated ${U.fmt(d)}`);
       ui().toast(`${isNew ? 'Added' : 'Saved'} ${out.item}: ${money(out.total)}.${moved}`, 'ok');
       if (again) setTimeout(() => editExpense(null, render, { date: d }), 0);
       return false;
@@ -854,6 +855,7 @@
     const ok = await ui().confirmBox('Delete', `Delete ${what}?`, 'Delete');
     if (!ok) return true;
     await S.store.deleteFin(r.id);
+    S.store.log(`Deleted ${r.kind === 'exp' ? 'expense ' : ''}${what}`);
     render();
     ui().toast('Deleted.', 'ok');
     return false;
@@ -984,6 +986,7 @@
       const moved = followYear(d, fresh);
       if (view.tab === 'inc') view.stream = out.stream;
       render();
+      S.store.log(`${isNew ? 'Added' : 'Edited'} ${STREAMS[out.stream].one}${out.company ? ' ' + out.company : ''}: ${n(out.head)} head, ${money(out.total)}, dated ${U.fmt(d)}`);
       ui().toast(`${isNew ? 'Added' : 'Saved'} ${STREAMS[out.stream].one}: ${money(out.total)}.${moved}`, 'ok');
       if (again) setTimeout(() => editIncome(null, render, { date: d, stream: out.stream }), 0);
       return false;

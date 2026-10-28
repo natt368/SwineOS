@@ -152,6 +152,7 @@
       await S.store.saveFin(out);
       view.year = +d.slice(0, 4);
       render();
+      S.store.log(`${isNew ? 'Added' : 'Edited'} move to Finisher: ${n(out.head)} pigs on ${U.fmt(d)}${out.room ? ' from room ' + out.room : ''}`);
       ui().toast(`${isNew ? 'Added' : 'Saved'}: ${n(out.head)} pigs moved ${U.fmt(d)}.`, 'ok');
       if (again) setTimeout(() => edit(null, render, { date: d }), 0);
       return false;
