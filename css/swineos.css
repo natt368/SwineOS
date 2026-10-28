@@ -1022,16 +1022,6 @@ button { cursor: pointer; }
 .dm-row { display: flex; justify-content: space-between; gap: 16px; padding: 5px 0; border-bottom: 1px solid #e3e8f6; }
 .dm-row span { color: #4a5576; }
 .dm-row b { text-align: right; }
-.dm-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
-.dm-acts3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.dm-act { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 14px 16px; border-radius: 14px; border: 2px solid var(--royal);
-  background: #fff; color: var(--royal); cursor: pointer; font: inherit; position: relative; }
-.dm-act b { font: 700 17px var(--bold); }
-.dm-act small { color: #4a5576; font-size: 13px; line-height: 1.35; }
-.dm-act:hover, .dm-act:focus-within { background: var(--royal-soft); }
-.dm-act input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
-.dm-act.danger { border-color: #c0392b; color: #c0392b; }
-.dm-act.danger:hover { background: #fdecea; }
 .dm-prog:empty { display: none; }
 .dm-card.dm-small { padding: 12px 16px 14px; border-top-width: 3px; box-shadow: 0 2px 10px rgba(29, 63, 174, .08); }
 .dm-small-head { display: flex; align-items: baseline; gap: 6px 14px; flex-wrap: wrap; }
@@ -1044,6 +1034,7 @@ button { cursor: pointer; }
 .dm-mini:focus-visible { outline: 3px solid #9db4ff; outline-offset: 2px; }
 .dm-mini input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
 .dm-mini.danger { border-color: #c0392b; color: #b0361f; }
+.dm-sep { width: 1px; align-self: stretch; background: #d5ddf5; margin: 2px 4px; }
 .dm-mini.danger:hover { background: #fdecea; }
 .dm-danger { align-self: flex-start; color: #66708f; font-size: 13px; padding: 2px 4px; }
 .dm-danger summary { cursor: pointer; color: #8a3b30; font-weight: 600; font-size: 13px; }
@@ -1060,7 +1051,7 @@ button { cursor: pointer; }
 .dm-log td { padding: 5px 8px; border-bottom: 1px solid #e3e8f6; vertical-align: top; }
 .dm-log td:first-child { white-space: nowrap; color: #4a5576; width: 1%; }
 @media (max-width: 900px) {
-  .dm-grid, .dm-acts, .dm-acts3 { grid-template-columns: 1fr; }
+  .dm-grid { grid-template-columns: 1fr; }
   .dm-head { flex-direction: column; align-items: flex-start; gap: 10px; }
   .ld-gear-l { display: none; }
 }

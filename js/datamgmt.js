@@ -9,9 +9,6 @@
 
   const card = (title, sub, ...kids) => h('section.dm-card', h('h2', title), sub ? h('p.dm-sub', sub) : null, ...kids);
   const row = (k, v) => h('div.dm-row', h('span', k), h('b', v === '' || v === undefined || v === null ? '–' : String(v)));
-  const action = (label, sub, onclick, cls = '') => h('button.dm-act' + cls, { type: 'button', onclick }, h('b', label), sub ? h('small', sub) : null);
-  const fileAction = (label, sub, accept, onfile, cls = '') => h('label.dm-act' + cls, h('b', label), sub ? h('small', sub) : null,
-    h('input', { type: 'file', accept, onchange: (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) onfile(f); } }));
   // small buttons for the one-time imports and start over; the explanation is the hover tip
   const mini = (label, tip, onclick, cls = '') => h('button.dm-mini' + cls, { type: 'button', title: tip, onclick }, label);
   const miniFile = (label, tip, accept, onfile) => h('label.dm-mini', { title: tip }, label,
@@ -80,14 +77,13 @@
               h('h3', 'Storage'),
               row('Saved in', st.backend === 'cloud' ? 'Shared online database' : 'This browser on this computer'),
               row('Last saved', saved ? U.fmtDT(saved) : ''),
-              row('Last Google Drive backup', S.drive.configured() ? (S.drive.config.lastBackup ? U.fmtDT(S.drive.config.lastBackup) : 'not yet') : 'not connected')),
-            card('Backup files', 'A backup file holds every animal, event and finance record.',
-              h('div.dm-acts',
-                action('Download backup file', 'Save a copy to this computer', () => { ui().saveFile(`swineos-backup-${U.today()}.json`, S.store.exportJSON(), 'application/json'); S.safety.markDownload(); }),
-                fileAction('Restore backup file…', 'Replaces the records now in SwineOS', '.json,.gz,application/json,application/gzip,.bdr,.BDR', (f) => S.settingsUI.restore(f, prog)))))),
+              row('Last Google Drive backup', S.drive.configured() ? (S.drive.config.lastBackup ? U.fmtDT(S.drive.config.lastBackup) : 'not yet') : 'not connected')))),
         h('section.dm-card.dm-small',
-          h('div.dm-small-head', h('h2', 'Import'), h('span', 'Usually done once, when moving from PigWIN or Excel. Point at a button for what it reads.')),
+          h('div.dm-small-head', h('h2', 'Import or backup'), h('span', 'A backup file holds every animal, event and finance record. Imports are usually done once. Point at a button for what it does.')),
           h('div.dm-minis',
+            mini('Download backup file', 'Save a copy of every animal, event and finance record to this computer.', () => { ui().saveFile(`swineos-backup-${U.today()}.json`, S.store.exportJSON(), 'application/json'); S.safety.markDownload(); }),
+            miniFile('Restore backup file…', 'Replaces the records now in SwineOS with a backup file (asks first).', '.json,.gz,application/json,application/gzip,.bdr,.BDR', (f) => S.settingsUI.restore(f, prog)),
+            h('span.dm-sep', { 'aria-hidden': 'true' }),
             miniFile('PigWIN backup (.BDR)', 'Herd records: every sow, boar and their history from PigWIN / PigLITTER. Replaces the herd now on file; finances are kept.', '.bdr,.BDR,.zip', (f) => S.settingsUI.importPigwin(f, prog)),
             miniFile('Animals (CSV)', 'Herd records: adds new animals. Columns ID, Sex, Birth date, Arrival date, Entry date, Parity, Breed, Location.', '.csv,text/csv', (f) => S.settingsUI.importCsv(f, prog)),
             mini('Moved to Finisher (Excel)', 'Herd records: the MOVED TO FINISHER sheet of the Expense & Income workbook (.xls or .xlsx).', () => S.finisher.importDialog(render)),
