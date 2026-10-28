@@ -645,7 +645,7 @@
     const firstDate = (cfg.preset && cfg.preset.date) || defaultDate();
     function cell(tr, c) {
       let el;
-      if (c.k === 'date') el = ui().dateInput(null, '', { 'aria-label': 'Date', placeholder: tbody.rows.length ? 'same ↑' : 'Mmm/DD/YY' });
+      if (c.k === 'date') el = ui().dateInput(null, '', { 'aria-label': 'Date' });
       else if (c.options) el = ui().select(null, c.options(), '', { 'aria-label': c.label });
       else el = h('input', { autocomplete: 'off', 'aria-label': c.label, list: c.list || null, inputmode: c.num ? 'decimal' : null });
       const box = el.classList && el.classList.contains('dt-wrap') ? el.querySelector('input.dt') : el;
@@ -657,17 +657,26 @@
      *  opts.hints: faint example text per box (e.g. last month's quantity). */
     function addRow(vals = {}, opts = {}) {
       const tr = h('tr'); tr.els = {};
+      // every row shows its date: a row without its own date takes the one above, and follows it when that one changes
+      const above = tbody.rows.length ? tbody.rows[tbody.rows.length - 1].els.date.value : '';
+      tr.dateAuto = !vals.date;
+      vals = { ...vals, date: vals.date || above || firstDate };
       if (opts.need) { tr.need = opts.need; tr.classList.add('fin-bulk-pre'); }
       COLS.forEach((c) => tr.appendChild(cell(tr, c)));
       tr.appendChild(h('td.fin-bulk-x', h('button', { type: 'button', title: 'Remove this row', 'aria-label': 'Remove this row', tabindex: -1, onclick: () => { tr.remove(); if (!tbody.rows.length) addRow(); update(); } }, '✕')));
       tbody.appendChild(tr);
       for (const [k, v] of Object.entries(vals)) if (tr.els[k] && v !== undefined && v !== null) tr.els[k].value = v;
       for (const [k, v] of Object.entries(opts.hints || {})) if (tr.els[k] && v) tr.els[k].placeholder = v;
-      COLS.forEach((c) => tr.els[c.k].addEventListener('change', () => { if (cfg.onRow) cfg.onRow(tr, c.k); update(); }));
+      COLS.forEach((c) => tr.els[c.k].addEventListener('change', () => { if (c.k === 'date') dateChanged(tr); if (cfg.onRow) cfg.onRow(tr, c.k); update(); }));
       if (cfg.onRow) cfg.onRow(tr, null);
       return tr;
     }
     const rows = () => [...tbody.rows];
+    /** A date typed in a row: it is that row's own now, and the rows below that still follow take it too. */
+    function dateChanged(tr) {
+      tr.dateAuto = false;
+      for (let next = tr.nextElementSibling; next && next.dateAuto; next = next.nextElementSibling) next.els.date.value = tr.els.date.value;
+    }
     const blank = (tr) => (tr.need ? tr.need.every((k) => !String(tr.els[k].value || '').trim()) // a filled-in row counts once its own boxes are typed
       : COLS.every((c) => c.k === 'date' || c.options || c.auto || !String(tr.els[c.k].value || '').trim())); // filled-in-for-you boxes do not count
     function read() {
@@ -708,7 +717,7 @@
         line.split('\t').forEach((val, j) => {
           const c = COLS[startCol + j]; if (!c) return;
           let v = val.trim();
-          if (c.k === 'date') v = U.parseDate(v) || '';
+          if (c.k === 'date') { v = U.parseDate(v) || ''; if (v) tr.dateAuto = false; }
           else if (c.options) v = c.match ? c.match(v) : v;
           else if (c.num) v = v.replace(/[$,\s]/g, '');
           tr.els[c.k].value = v;
@@ -764,7 +773,7 @@
     const catOpts = () => [['', 'Pick…'], ...cats().map((c) => [String(c.code), `${c.code} · ${c.name}`])];
     bulkDialog({
       title: 'New expenses', render, preset, firstKey: 'item', past,
-      hint: 'One bill per row. A product bought before fills in its company, unit and type. Quantity × $ / unit makes the total. Leave the date empty to use the date of the row above. You can also copy rows from Excel and paste them here. Month end fills in last month end\'s products: the faint numbers are what was paid then.',
+      hint: 'One bill per row. A product bought before fills in its company, unit and type. Quantity × $ / unit makes the total. Each row takes the date above it; change the top date and the rows below follow. You can also copy rows from Excel and paste them here. Month end fills in last month end\'s products: the faint numbers are what was paid then.',
       cols: [
         { k: 'date', label: 'Date', w: 138 }, { k: 'item', label: 'Product', w: 170, list: 'fb-items' }, { k: 'company', label: 'Company', w: 140, list: 'fb-companies' },
         { k: 'qty', label: 'Quantity', w: 96, num: true }, { k: 'unit', label: 'Unit', w: 84, list: 'fb-units' },
@@ -825,7 +834,7 @@
     const already = past.filter((r) => r.date === date).length;
     me.rows.forEach((r, i) => {
       const last = r.qty ? r.total / r.qty : null;
-      t.addRow({ date: i === 0 ? date : '', item: r.item, company: r.company || '', unit: r.unit || '', cat: r.cat ? String(r.cat) : '', tag: r.tag || '' }, {
+      t.addRow({ date: i === 0 ? date : undefined, item: r.item, company: r.company || '', unit: r.unit || '', cat: r.cat ? String(r.cat) : '', tag: r.tag || '' }, {
         need: ['qty', 'per', 'total'],
         hints: { qty: r.qty ? n(r.qty, r.qty % 1 ? 3 : 0) : '', per: last !== null ? (last < 10 ? last.toFixed(3) : last.toFixed(2)) : '', total: n(r.total, 2) },
       });
@@ -844,7 +853,7 @@
     bulkDialog({
       title: 'New income', render, firstKey: 'company', past,
       preset: { date: preset && preset.date, row: { stream: stream0 } },
-      hint: 'One cheque per row. Pick what the income is from; the hog columns (index, price, fat, lean, bonus, lean incentive) are for hog sales only. Leave the date empty to use the date of the row above. You can also copy rows from Excel and paste them here.',
+      hint: 'One cheque per row. Pick what the income is from; the hog columns (index, price, fat, lean, bonus, lean incentive) are for hog sales only. Each row takes the date above it; change the top date and the rows below follow. You can also copy rows from Excel and paste them here.',
       cols: [
         { k: 'date', label: 'Date', w: 138 },
         { k: 'stream', label: 'Income from', w: 150, options: () => Object.entries(STREAMS).map(([k, x]) => [k, x.label]), match: (v) => { const t = v.toLowerCase(); const hit = Object.entries(STREAMS).find(([k, x]) => k === t || x.label.toLowerCase() === t || x.unit.toLowerCase() === t || t.startsWith(x.label.toLowerCase().slice(0, 4))); return hit ? hit[0] : 'hogs'; } },
