@@ -145,9 +145,9 @@
 
   /* ---------- the window ---------- */
   function open() {
-    view.tab = 'overview'; // Finances always opens on the Overview
-    const ys = years();
-    if (!view.year || !ys.includes(view.year)) view.year = [...ys].reverse().find((y) => lastMonth(y) >= 0) || ys[ys.length - 1];
+    // Finances always opens on the Overview of this year, so bills and cheques go in the right year
+    view.tab = 'overview';
+    setYear(+U.today().slice(0, 4));
     const win = ui().appWindow({ title: 'Finances', cls: 'fin-win', onClose: () => S.app.landing() });
     const head = h('header.fin-head');
     const tabs = h('nav.fin-tabs', { role: 'tablist' });
@@ -524,9 +524,18 @@
       { label: 'Cancel', right: true },
     ].filter(Boolean);
   }
-  function defaultDate() {
-    const t = U.today();
-    return t.startsWith(String(view.year)) ? t : `${view.year}-12-31` < t ? `${view.year}-12-31` : t;
+  /** New bills and cheques start on today's date, whatever year is on screen. */
+  function defaultDate() { return U.today(); }
+  /**
+   * Bills and cheques dated in another year than this one are easy to enter by mistake: ask first.
+   * Resolves true to go ahead.
+   */
+  async function confirmYears(dates) {
+    const cur = +U.today().slice(0, 4);
+    const other = [...new Set(dates.map((d) => +d.slice(0, 4)))].filter((y) => y !== cur).sort((a, b) => a - b);
+    if (!other.length) return true;
+    const what = dates.length === 1 ? 'This is dated' : `${dates.filter((d) => +d.slice(0, 4) !== cur).length} of these are dated`;
+    return ui().confirmBox('Check the year', `${what} ${other.join(', ')}, not ${cur}.\n\nSave in ${other.join(', ')} anyway?`, `Save in ${other.join(', ')}`);
   }
 
   /**
@@ -609,6 +618,7 @@
       const out = { ...r, kind: 'exp', date: d, item: item.value.trim(), company: company.value.trim(), qty: num(qty.value), unit: unit.value.trim().toUpperCase(), total: Math.round(t * 100) / 100, cat: +cat.value, tag: tag.value.trim().toUpperCase() };
       if (note.value.trim()) out.note = note.value.trim(); else delete out.note;
       if (!isNew) out.hand = true; // changed in SwineOS: a later Excel import leaves it alone
+      if ((isNew || r.date.slice(0, 4) !== d.slice(0, 4)) && !(await confirmYears([d]))) return true;
       const fresh = lastMonth(+d.slice(0, 4)) < 0;
       await S.store.saveFin(out);
       const moved = followYear(d, fresh);
@@ -721,6 +731,7 @@
         return true;
       }
       const recs = list.map((x) => x.rec);
+      if (!(await confirmYears(recs.map((r) => r.date)))) return true;
       const fresh = [...new Set(recs.map((r) => +r.date.slice(0, 4)))].filter((y) => lastMonth(y) < 0);
       await S.store.putFin(recs, []);
       const latest = recs.map((r) => r.date).sort().pop();
@@ -967,6 +978,7 @@
       setOpt('outstanding', stream.value !== 'hogs' && outstanding.value.trim() ? outstanding.value.trim() : null);
       setOpt('note', note.value.trim() || null);
       if (!isNew) out.hand = true; // changed in SwineOS: a later Excel import leaves it alone
+      if ((isNew || r.date.slice(0, 4) !== d.slice(0, 4)) && !(await confirmYears([d]))) return true;
       const fresh = lastMonth(+d.slice(0, 4)) < 0;
       await S.store.saveFin(out);
       const moved = followYear(d, fresh);
