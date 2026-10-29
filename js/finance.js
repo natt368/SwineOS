@@ -53,6 +53,24 @@
   function recsOf(year, kind) { const y = String(year); return S.store.fin().filter((r) => r.kind === kind && r.date && r.date.startsWith(y)); }
 
   /** Everything the overview and year-end report show, for one year (optionally only up to a month, 0-based). */
+  /** Feed conversion settings (dressing %, bushel weights). */
+  function fcrSettings() { const d = S.DEFAULT_SETTINGS.fin.fcr; const f = finSettings().fcr || {}; return { ...d, ...f, bushel: { ...d.bushel, ...(f.bushel || {}) } }; }
+  /**
+   * A feed expense's quantity in kg (tons, kg, lb, bushels by product), or null when its unit is not a weight (bags,
+   * pails…). The price shows a ton / kg mix-up in the workbooks (1,135 "TON" of granulime at $4 a ton is 1,135 kg):
+   * a ton under $50 is read as kg, a kg over $100 as a ton. fixed counts those lines.
+   */
+  function feedKg(r, fc, fixed) {
+    const q = Number(r.qty); if (!Number.isFinite(q) || !q) return null;
+    const u = String(r.unit || '').toUpperCase().trim();
+    const each = (r.total || 0) / q;
+    if (/^(TON|TONNE|MT\b|T$)/.test(u)) { if (each > 0 && each < 50) { fixed.n++; return q; } return q * 1000; }
+    if (/^(KG|KILO)/.test(u)) { if (each > 100) { fixed.n++; return q * 1000; } return q; }
+    if (/^LB/.test(u)) return q * 0.45359;
+    if (/^BU/.test(u)) { const item = String(r.item || '').toUpperCase(); const k = Object.keys(fc.bushel).find((b) => item.includes(b)); return q * (k ? fc.bushel[k] : fc.otherBushel); }
+    return null;
+  }
+
   function summarize(year, uptoMonth = 11) {
     const inMonths = (r) => +r.date.slice(5, 7) - 1 <= uptoMonth;
     const exp = recsOf(year, 'exp').filter(inMonths);
@@ -60,24 +78,30 @@
     const feed = new Set(cats().filter((c) => c.feed).map((c) => c.code));
     const months = Array.from({ length: 12 }, (_, m) => ({ m, income: 0, expense: 0, shipped: 0, hogHead: 0, hogTotal: 0, idx: 0, idxHead: 0, wt: 0, wtHead: 0, recs: 0 }));
     const byCat = new Map();
-    let feedCost = 0;
+    let feedCost = 0; let feedKgSum = 0; let feedNoKg = 0; const noKgUnits = new Set(); const fixed = { n: 0 };
+    const fc = fcrSettings();
     for (const r of exp) {
       const mo = months[+r.date.slice(5, 7) - 1];
       mo.expense += r.total || 0; mo.recs++;
-      if (feed.has(Number(r.cat))) feedCost += r.total || 0;
+      if (feed.has(Number(r.cat))) {
+        feedCost += r.total || 0;
+        const kg = feedKg(r, fc, fixed);
+        if (kg === null) { feedNoKg += r.total || 0; noKgUnits.add(String(r.unit || 'no unit').toLowerCase()); } else feedKgSum += kg;
+      }
       const k = Number(r.cat) || 0;
       const c = byCat.get(k) || { code: k, name: catName(k), feed: feed.has(k), total: 0, n: 0, units: {} };
       c.total += r.total || 0; c.n++;
       if (r.qty) { const u = (r.unit || '').toUpperCase(); c.units[u] = (c.units[u] || 0) + r.qty; }
       byCat.set(k, c);
     }
-    const streams = {}; for (const k of Object.keys(STREAMS)) streams[k] = { head: 0, total: 0, n: 0 };
+    const streams = {}; for (const k of Object.keys(STREAMS)) streams[k] = { head: 0, total: 0, n: 0, wt: 0 };
     const hog = { head: 0, total: 0, wt: 0, wtHead: 0, idx: 0, idxHead: 0, prices: [], lean: 0, leanHead: 0, fat: 0, fatHead: 0, bonus: 0, bonusHead: 0, leanInc: 0, leanIncHead: 0 };
     for (const r of inc) {
       const mo = months[+r.date.slice(5, 7) - 1];
       mo.income += r.total || 0; mo.recs++;
-      const st = streams[r.stream] || (streams[r.stream] = { head: 0, total: 0, n: 0 });
+      const st = streams[r.stream] || (streams[r.stream] = { head: 0, total: 0, n: 0, wt: 0 });
       st.head += r.head || 0; st.total += r.total || 0; st.n++;
+      st.wt += Number.isFinite(r.totalWt) ? r.totalWt : Number.isFinite(r.avgWt) ? r.avgWt * (r.head || 0) : 0;
       if (r.stream === 'hogs' || r.stream === 'cripples') mo.shipped += r.head || 0;
       if (r.stream !== 'hogs') continue;
       const hd = r.head || 0;
@@ -92,7 +116,16 @@
     const shipped = U.sum(months.map((m) => m.shipped));
     const sows = sowsFor(year);
     const per = (a, b) => (b ? a / b : NaN);
+    // feed conversion: kg of feed ÷ kg produced. Hog sale weights are carcass kg; cripples and culls are live.
+    // The oldest workbooks (2003) give live weights in pounds (about 257 a hog): a year averaging over 180 is read that way.
+    const pounds = per(hog.wt, hog.wtHead) > 180;
+    const lb = pounds ? 0.45359 : 1;
+    const carcassKg = pounds ? NaN : hog.wt;
+    const liveKg = (pounds ? hog.wt * lb : hog.wt / ((fc.dressing || 80) / 100)) + (streams.cripples.wt + streams.culls.wt) * lb;
+    const feedConv = { kg: feedKgSum, perHog: per(feedKgSum, shipped), carcass: per(feedKgSum, carcassKg), live: per(feedKgSum, liveKg), liveKg, pounds,
+      costPerKgCarcass: per(feedCost, carcassKg), notCounted: feedNoKg, notCountedUnits: [...noKgUnits], fixed: fixed.n, dressing: fc.dressing || 80 };
     return {
+      feedConv,
       year, uptoMonth, months, income, expense, balance: income - expense, margin: per(income - expense, income), shipped, sows,
       feedCost, feedPerHog: per(feedCost, shipped), incomePerHog: per(income, shipped), costPerHog: per(expense, shipped), profitPerHog: per(income - expense, shipped),
       incomePerSow: per(income, sows), shippedPerSow: per(shipped, sows), byCat: [...byCat.values()].sort((a, b) => b.total - a.total), streams,
@@ -269,7 +302,7 @@
     if (!ys.length) { wrap.appendChild(emptyState(view.year, render)); return wrap; }
     const rows = ys.map((y) => { const s = summarize(y); return { y, s, last: lastMonth(y), recs: s.nExp + s.nInc, income: s.income, expense: s.expense, shipped: s.shipped }; });
     const sum = (f) => U.sum(rows.map((r) => f(r.s)));
-    const T = { income: sum((s) => s.income), expense: sum((s) => s.expense), shipped: sum((s) => s.shipped), feed: sum((s) => s.feedCost) };
+    const T = { income: sum((s) => s.income), expense: sum((s) => s.expense), shipped: sum((s) => s.shipped), feed: sum((s) => s.feedCost), feedKg: sum((s) => s.feedConv.kg), liveKg: sum((s) => (s.feedConv.kg ? s.feedConv.liveKg : 0)) };
     T.balance = T.income - T.expense;
     const span = ys.length > 1 ? `${ys[0]}–${ys[ys.length - 1]}` : String(ys[0]);
     const partial = (r) => r.last < 11 && r.y >= +U.today().slice(0, 4);
@@ -325,12 +358,12 @@
       ['Year', (r) => (r.y === 'Total' ? 'Total' : `${r.y}${partial(r) ? ` (to ${monthName(r.last)})` : ''}`)],
       ['Sows', (r) => (r.s.sows ? n(r.s.sows) : '')], ['Hogs shipped', (r) => n(r.s.shipped)],
       ['Income', (r) => money(r.s.income, 0)], ['Expenses', (r) => money(r.s.expense, 0)], ['Balance', (r) => money(r.s.balance, 0)], ['Profit', (r) => pct(r.s.margin)],
-      ['Income / hog', (r) => money(r.s.incomePerHog)], ['Cost / hog', (r) => money(r.s.costPerHog)], ['Profit / hog', (r) => money(r.s.profitPerHog)], ['Feed / hog', (r) => money(r.s.feedPerHog)],
+      ['Income / hog', (r) => money(r.s.incomePerHog)], ['Cost / hog', (r) => money(r.s.costPerHog)], ['Profit / hog', (r) => money(r.s.profitPerHog)], ['Feed / hog', (r) => money(r.s.feedPerHog)], ['Feed conv.', (r) => (r.s.feedConv && r.s.feedConv.kg ? n(r.s.feedConv.live, 2) : '')],
       ['Hogs / sow', (r) => (r.s.sows ? n(r.s.shippedPerSow, 1) : '')], ['Income / sow', (r) => (r.s.sows ? money(r.s.incomePerSow, 0) : '')], ['$ / hog sold', (r) => money(r.s.hog.perHog)], ['Avg index', (r) => n(r.s.hog.index, 1)],
     ];
     const per = (a, b) => (b ? a / b : NaN);
     const tot = { y: 'Total', s: { sows: 0, shipped: T.shipped, income: T.income, expense: T.expense, balance: T.balance, margin: per(T.balance, T.income), incomePerHog: per(T.income, T.shipped), costPerHog: per(T.expense, T.shipped),
-      profitPerHog: per(T.balance, T.shipped), feedPerHog: per(T.feed, T.shipped), hog: { perHog: per(sum((s) => s.hog.total), sum((s) => s.hog.head)), index: NaN } } };
+      profitPerHog: per(T.balance, T.shipped), feedPerHog: per(T.feed, T.shipped), feedConv: { kg: T.feedKg, live: per(T.feedKg, T.liveKg) }, hog: { perHog: per(sum((s) => s.hog.total), sum((s) => s.hog.head)), index: NaN } } };
     const list = [...rows].reverse();
     const table = h('table.fin-table.fin-hist',
       h('thead', h('tr', cols.map(([l], i) => h('th', { class: i ? 'num' : null }, l)))),
@@ -1060,6 +1093,13 @@
       ['Total income', money(s.income)], ['Total expenses', money(s.expense)], ['Balance', money(s.balance)], ['Profit', pct(s.margin), 'of income'],
       ['Hogs shipped', n(s.shipped), 'hog sales and cripples'], ['Income / hog shipped', money(s.incomePerHog)], ['Expenses / hog shipped', money(s.costPerHog)], ['Profit / hog shipped', money(s.profitPerHog)],
       ['Feed cost', money(s.feedCost)], ['Feed cost / hog shipped', money(s.feedPerHog)],
+      ['Feed fed', s.feedConv.kg ? `${n(s.feedConv.kg / 1000, 1)} t` : '—', ['quantities of the feed expenses (bushels at the weights in Finance settings)',
+        s.feedConv.notCounted ? `${money(s.feedConv.notCounted, 0)} in ${s.feedConv.notCountedUnits.join(', ')} not counted` : '',
+        s.feedConv.fixed ? `${s.feedConv.fixed} ${s.feedConv.fixed === 1 ? 'line' : 'lines'} with tons and kg mixed up read by their price` : ''].filter(Boolean).join('; ')],
+      ['Feed / hog shipped', s.feedConv.kg ? `${n(s.feedConv.perHog, 0)} kg` : '—'],
+      ['Feed conversion, carcass', s.feedConv.kg && !s.feedConv.pounds ? n(s.feedConv.carcass, 2) : '—', s.feedConv.pounds ? 'this year\'s hog weights are live pounds' : 'kg feed ÷ kg carcass of the hog sales'],
+      ['Feed conversion, live (whole herd)', s.feedConv.kg ? n(s.feedConv.live, 2) : '—', s.feedConv.pounds ? 'kg feed ÷ kg live: hog sales (live pounds), cripples and culls' : `kg feed ÷ kg live: hog sales at ${s.feedConv.dressing}% dressing, cripples and culls`],
+      ['Feed cost / kg carcass', money(s.feedConv.costPerKgCarcass, 3)],
       ['Income / breeding female / year', s.sows ? money(s.incomePerSow) : '—'], ['Hogs shipped / breeding female / year', s.sows ? n(s.shippedPerSow, 1) : '—'],
       ['Hogs sold (hog sales)', n(s.hog.head)], ['Average $ / hog sold', money(s.hog.perHog)], ['Average weight / hog sold', n(s.hog.avgWt, 1) + ' kg'], ['Total weight sold', n(s.hog.totalWt, 0) + ' kg'],
       ['Average index', n(s.hog.index, 2)], ['Average price', money(s.hog.price, 4), 'average of the loads'], ['Average fat', n(s.hog.fat, 1)], ['Average lean', n(s.hog.lean, 1)],
@@ -1323,6 +1363,10 @@ tr { break-inside: avoid; }
     const y = view.year;
     const herd = herdSows(y);
     const sows = ui().input('fs-sows', fs.sows[y] || '', { inputmode: 'numeric', placeholder: herd ? String(herd) : '' });
+    const fc = fcrSettings();
+    const dressing = ui().input('fs-dress', String(fc.dressing), { inputmode: 'decimal', style: { maxWidth: '90px' } });
+    const bu = Object.fromEntries(Object.entries(fc.bushel).map(([k, v]) => [k, ui().input('fs-bu-' + k, String(v), { inputmode: 'decimal', style: { maxWidth: '90px' } })]));
+    const buOther = ui().input('fs-bu-other', String(fc.otherBushel), { inputmode: 'decimal', style: { maxWidth: '90px' } });
     const list = cats().map((c) => ({ ...c }));
     const tbody = h('tbody');
     const draw = () => {
@@ -1337,6 +1381,10 @@ tr { break-inside: avoid; }
     const body = h('div.fin-form.fin-settings',
       h('h3', `Number of sows in ${y}`),
       ui().field('Average breeding females', sows, herd ? `Leave blank to use the herd records: ${herd} breeding females.` : 'Used for income and hogs shipped per sow per year.'),
+      h('h3', 'Feed conversion'),
+      h('p.fin-muted', 'Feed conversion is kg of feed ÷ kg of pig. The feed is the quantity of the feed expenses (grain from the bins entered as an expense counts as fed). Hog sale weights are carcass weights: the dressing % turns them into live weight.'),
+      ui().field('Dressing %', dressing, 'Carcass weight as a % of live weight (about 80 for index hogs)'),
+      h('div.fs-bu', Object.entries(bu).map(([k, el]) => ui().field(`${k.charAt(0)}${k.slice(1).toLowerCase()}, kg per bushel`, el)), ui().field('Other grain, kg per bushel', buOther)),
       h('h3', 'Expense types'),
       h('p.fin-muted', 'The type codes from the TYPE column of the expense sheet. Types marked feed add up to the feed cost.'),
       h('div.fin-scroll.fs-cats', h('table.fin-table', h('thead', h('tr', h('th', 'Code'), h('th', 'Name'), h('th.c', 'Feed'), h('th'))), tbody)),
@@ -1347,7 +1395,9 @@ tr { break-inside: avoid; }
         if (codes.some((c) => !c) || new Set(codes).size !== codes.length) { ui().toast('Every type needs its own code number.', 'error'); return true; }
         const v = num(sows.value);
         const s2 = { ...fs.sows }; if (v) s2[y] = v; else delete s2[y];
-        await saveFinSettings({ cats: list.map((c) => ({ code: c.code, name: c.name.trim() || `Type ${c.code}`, feed: !!c.feed })), sows: s2 });
+        const pos = (el, d) => { const x = num(el.value); return x && x > 0 ? x : d; };
+        const fcr = { dressing: Math.min(100, pos(dressing, fc.dressing)), bushel: Object.fromEntries(Object.entries(bu).map(([k, el]) => [k, pos(el, fc.bushel[k])])), otherBushel: pos(buOther, fc.otherBushel) };
+        await saveFinSettings({ cats: list.map((c) => ({ code: c.code, name: c.name.trim() || `Type ${c.code}`, feed: !!c.feed })), sows: s2, fcr });
         render();
         return false;
       } },
