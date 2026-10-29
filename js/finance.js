@@ -95,7 +95,7 @@
       byCat.set(k, c);
     }
     const streams = {}; for (const k of Object.keys(STREAMS)) streams[k] = { head: 0, total: 0, n: 0, wt: 0 };
-    const hog = { head: 0, total: 0, wt: 0, wtHead: 0, idx: 0, idxHead: 0, prices: [], lean: 0, leanHead: 0, fat: 0, fatHead: 0, bonus: 0, bonusHead: 0, leanInc: 0, leanIncHead: 0 };
+    const hog = { head: 0, total: 0, wt: 0, wtHead: 0, idx: 0, idxHead: 0, prices: [], priceW: 0, priceWt: 0, lean: 0, leanHead: 0, fat: 0, fatHead: 0, bonus: 0, bonusHead: 0, leanInc: 0, leanIncHead: 0 };
     for (const r of inc) {
       const mo = months[+r.date.slice(5, 7) - 1];
       mo.income += r.total || 0; mo.recs++;
@@ -109,7 +109,11 @@
       const wt = Number.isFinite(r.totalWt) ? r.totalWt : Number.isFinite(r.avgWt) ? r.avgWt * hd : null;
       if (wt !== null) { hog.wt += wt; hog.wtHead += hd; mo.wt += wt; mo.wtHead += hd; }
       if (Number.isFinite(r.index)) { hog.idx += r.index * hd; hog.idxHead += hd; mo.idx += r.index * hd; mo.idxHead += hd; }
-      if (Number.isFinite(r.price)) hog.prices.push(r.price);
+      if (Number.isFinite(r.price)) {
+        hog.prices.push(r.price);
+        const pw = wt !== null && wt > 0 ? wt : hd; // weighted by the kg sold (by head when a load has no weight)
+        hog.priceW += r.price * pw; hog.priceWt += pw;
+      }
       for (const k of ['lean', 'fat', 'bonus', 'leanInc']) if (Number.isFinite(r[k])) { hog[k] += r[k] * hd; hog[k + 'Head'] += hd; }
     }
     const income = U.sum(months.map((m) => m.income)); const expense = U.sum(months.map((m) => m.expense));
@@ -130,8 +134,9 @@
       feedCost, feedPerHog: per(feedCost, shipped), incomePerHog: per(income, shipped), costPerHog: per(expense, shipped), profitPerHog: per(income - expense, shipped),
       incomePerSow: per(income, sows), shippedPerSow: per(shipped, sows), byCat: [...byCat.values()].sort((a, b) => b.total - a.total), streams,
       hog: { head: hog.head, total: hog.total, perHog: per(hog.total, hog.head), avgWt: per(hog.wt, hog.wtHead), totalWt: hog.wt, index: per(hog.idx, hog.idxHead),
-        // average price is the average of the loads, as the workbook works it out
-        price: hog.prices.length ? U.avg(hog.prices) : NaN, lean: per(hog.lean, hog.leanHead), fat: per(hog.fat, hog.fatHead),
+        // average price weighted by the kg sold, so a small load counts less than a big one;
+        // priceLoads is the workbook's way (each load counts once), kept for comparison
+        price: per(hog.priceW, hog.priceWt), priceLoads: hog.prices.length ? U.avg(hog.prices) : NaN, lean: per(hog.lean, hog.leanHead), fat: per(hog.fat, hog.fatHead),
         bonusTotal: hog.bonus, bonus: per(hog.bonus, hog.bonusHead), leanInc: per(hog.leanInc, hog.leanIncHead) },
       nExp: exp.length, nInc: inc.length,
     };
@@ -1026,8 +1031,10 @@
       stats.innerHTML = '';
       stats.append(kpi('Head', n(head)), kpi('Cheques', money(total)), kpi('$ / head', head ? money(total / head) : ''), kpi('Average weight', wtHead ? n(U.sum(wt.map((r) => r.totalWt)) / wtHead, 1) + ' kg' : ''));
       if (hogCols) {
-        const prices = list.map((r) => r.price).filter(Number.isFinite);
-        stats.append(kpi('Average index', n(w('index'), 1)), kpi('Average price', prices.length ? money(U.avg(prices), 3) : ''), kpi('Health bonus', money(U.sum(list.map((r) => (r.bonus || 0) * r.head)), 0), `${money(w('bonus'), 2)} / hog`), kpi('Lean incentive', money(w('leanInc'), 2), 'per hog'));
+        // average price weighted by the kg sold (by head when a load has no weight)
+        const priced = list.filter((r) => Number.isFinite(r.price)); const pw = (r) => (Number.isFinite(r.totalWt) && r.totalWt > 0 ? r.totalWt : r.head || 0);
+        const pWt = U.sum(priced.map(pw));
+        stats.append(kpi('Average index', n(w('index'), 1)), kpi('Average price', pWt ? money(U.sum(priced.map((r) => r.price * pw(r))) / pWt, 3) : '', 'weighted by kg'), kpi('Health bonus', money(U.sum(list.map((r) => (r.bonus || 0) * r.head)), 0), `${money(w('bonus'), 2)} / hog`), kpi('Lean incentive', money(w('leanInc'), 2), 'per hog'));
       }
     }
     update();
@@ -1131,7 +1138,7 @@
       ['Feed cost / kg carcass', money(fc.costPerKgCarcass, 3)],
       ['Income / breeding female / year', s.sows ? money(s.incomePerSow) : '—'], ['Hogs shipped / breeding female / year', s.sows ? n(s.shippedPerSow, 1) : '—'],
       ['Hogs sold (hog sales)', n(s.hog.head)], ['Average $ / hog sold', money(s.hog.perHog)], ['Average weight / hog sold', n(s.hog.avgWt, 1) + ' kg'], ['Total weight sold', n(s.hog.totalWt, 0) + ' kg'],
-      ['Average index', n(s.hog.index, 2)], ['Average price', money(s.hog.price, 4), 'average of the loads'], ['Average fat', n(s.hog.fat, 1)], ['Average lean', n(s.hog.lean, 1)],
+      ['Average index', n(s.hog.index, 2)], ['Average price', money(s.hog.price, 4), Number.isFinite(s.hog.priceLoads) ? `weighted by the kg sold; ${money(s.hog.priceLoads, 4)} as the workbook averages it (each load counts once)` : 'weighted by the kg sold'], ['Average fat', n(s.hog.fat, 1)], ['Average lean', n(s.hog.lean, 1)],
       ['Total health bonus', money(s.hog.bonusTotal)], ['Average health bonus / hog sold', money(s.hog.bonus, 4)], ['Average lean incentive / hog sold', money(s.hog.leanInc, 4)],
     ];
   }
