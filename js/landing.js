@@ -23,7 +23,7 @@
       h('h1.ld-name', h('span.l1', 'Swine'), h('span.l2', 'OS')),
       h('p.ld-tag', 'Sow herd records and farm finances'),
       h('div.ld-btns',
-        btn(ICON_HERD, 'Herd records', 'Matings, farrowings, weaning, sow cards and reports', () => S.app.home()),
+        btn(ICON_HERD, 'Herd Records', 'Matings, farrowings, weaning, sow cards and reports', () => S.app.home()),
         btn(ICON_MONEY, 'Finances', 'Income, expenses and year end', () => S.app.finances()))));
     win.appendChild(h('footer.ld-foot', farmLine()));
     return win;

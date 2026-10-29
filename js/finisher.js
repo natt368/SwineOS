@@ -29,7 +29,7 @@
       const ys2 = years(); const i = ys2.indexOf(view.year);
       head.innerHTML = '';
       head.append(
-        h('button.fin-home', { type: 'button', title: 'Back to Herd records', onclick: () => S.app.home() }, ico('back'), h('span', 'Herd records')),
+        h('button.fin-home', { type: 'button', title: 'Back to Herd Records', onclick: () => S.app.home() }, ico('back'), h('span', 'Herd Records')),
         h('div.fin-titles', h('h1', 'Moved to Finisher'), h('p', [S.store.settings.farmName, `Pigs moved to the Finisher in ${view.year}`].filter(Boolean).join('  ·  '))),
         h('div.fin-year', { role: 'group', 'aria-label': 'Year' },
           h('button', { type: 'button', title: 'Previous year', 'aria-label': 'Previous year', disabled: i <= 0, onclick: () => { view.year = ys2[i - 1]; render(); } }, ico('back')),

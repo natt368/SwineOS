@@ -111,14 +111,17 @@
         rows.push(datalist('dl-boars', bo));
         rows.push(ui().field('Boar / semen', ui().input('f-boar', e.boar || '', { list: 'dl-boars', autocomplete: 'off' })));
         rows.push(ui().field('Method', ui().select('f-method', ['AI', 'Natural', 'AI + Natural'], e.method || 'Natural')));
-        rows.push(ui().field('Technician', ui().select('f-tech', L.technicians, e.tech || '')));
+        // any name can be typed; the code list and the names used before are offered
+        const techs = [...new Set([...(L.technicians || []), ...S.store.animals().flatMap((x) => (x.events || []).filter((v) => v.type === 'mate' && v.tech).map((v) => v.tech))].filter(Boolean))].sort(U.natCmp);
+        rows.push(datalist('dl-techs', techs));
+        rows.push(ui().field('Technician', ui().input('f-tech', e.tech || '', { list: 'dl-techs', autocomplete: 'off', maxlength: 40 })));
         if (!existing) {
           rows.push(ui().field('2nd mating (next day)', ui().input('f-boar2', '', { list: 'dl-boars', autocomplete: 'off', placeholder: 'boar – optional' })));
           rows.push(ui().field('3rd mating (day after)', ui().input('f-boar3', '', { list: 'dl-boars', autocomplete: 'off', placeholder: 'boar – optional' })));
         }
         const wsiInfo = () => { info.textContent = r.lastWeanDate && r.status === 'Open' ? `Weaned ${U.fmt(r.lastWeanDate)} → interval ${U.diff(date.value, r.lastWeanDate)} days` : r.status === 'Served' ? `Already served ${U.fmt(r.lastService && r.lastService.date)} – this is a repeat service` : ''; };
         date.addEventListener('change', wsiInfo); wsiInfo();
-        Object.assign(get, { boar: () => U.$('#f-boar').value.trim(), method: () => U.$('#f-method').value, tech: () => U.$('#f-tech').value });
+        Object.assign(get, { boar: () => U.$('#f-boar').value.trim(), method: () => U.$('#f-method').value, tech: () => U.$('#f-tech').value.trim() });
         break;
       }
       case 'preg':
@@ -129,9 +132,10 @@
         break;
       case 'abort': break;
       case 'farrow': {
-        rows.push(ui().field('Born alive', ui().input('f-lb', e.liveBorn ?? '', { type: 'number', min: 0, max: 40, inputmode: 'numeric' })));
-        rows.push(ui().field('Stillborn', ui().input('f-sb', e.stillborn ?? 0, { type: 'number', min: 0, max: 30, inputmode: 'numeric' })));
-        rows.push(ui().field('Mummies', ui().input('f-mm', e.mummies ?? 0, { type: 'number', min: 0, max: 30, inputmode: 'numeric' })));
+        // the litter's numbers come first, above the date: they are what changes from sow to sow
+        rows.unshift(ui().field('Born alive', ui().input('f-lb', e.liveBorn ?? '', { type: 'number', min: 0, max: 40, inputmode: 'numeric' })),
+          ui().field('Stillborn', ui().input('f-sb', e.stillborn ?? 0, { type: 'number', min: 0, max: 30, inputmode: 'numeric' })),
+          ui().field('Mummies', ui().input('f-mm', e.mummies ?? 0, { type: 'number', min: 0, max: 30, inputmode: 'numeric' })));
         rows.push(ui().field('Litter birth weight (kg)', ui().input('f-bw', e.birthWeight ?? '', { type: 'number', step: '0.1', min: 0, inputmode: 'decimal' })));
         rows.push(ui().field('Farrowing location', ui().select('f-loc', [''].concat(L.locations), e.location || r.location || '')));
         rows.push(ui().field('Assisted farrowing', h('input', { id: 'f-assist', type: 'checkbox', checked: !!e.assisted })));
@@ -365,12 +369,12 @@
     return { animal: saved, errors: [], warnings };
   }
 
-  /** Values a "Save & next" carries to the next animal: date, the choice lists and the boar (numbers and remarks start empty). */
+  /** Values a "Save & next" carries to the next animal: date, the choice lists, the boar and the technician (numbers and remarks start empty). */
   function carryOf(host) {
     const c = {};
     host.querySelectorAll('input[id], select[id]').forEach((el) => {
       if (el.classList.contains('dt-native') || el.id === 'f-animal' || el.id === 'a-id') return;
-      if (el.tagName === 'SELECT' || el.classList.contains('dt') || ['f-boar', 'a-origin', 'a-line'].includes(el.id)) c[el.id] = el.value;
+      if (el.tagName === 'SELECT' || el.classList.contains('dt') || ['f-boar', 'f-tech', 'a-origin', 'a-line'].includes(el.id)) c[el.id] = el.value;
     });
     return c;
   }
@@ -438,10 +442,11 @@
 
   /**
    * Quick entry with the Enter key: each Enter goes to the next box, and after the last one to "Save & next".
-   * A weaning only needs the pigs weaned and the date: Enter goes from the date straight to "Save & next"
-   * (weight, location and remarks can still be clicked). Enter in the Animal ID box shows that animal's form at once.
+   * A weaning only needs the pigs weaned and the date, a farrowing the born alive, stillborn, mummies and the date:
+   * Enter goes from the date straight to "Save & next" (weights, location, assisted and remarks can still be clicked).
+   * Enter in the Animal ID box shows that animal's form at once.
    */
-  const ENTER_STOPS = { wean: ['f-count', 'f-date'], partwean: ['f-count', 'f-date'] };
+  const ENTER_STOPS = { wean: ['f-count', 'f-date'], partwean: ['f-count', 'f-date'], farrow: ['f-lb', 'f-sb', 'f-mm', 'f-date'] };
   function quickEnter(m, host, idBox, type, lookup) {
     const next = () => m.box.querySelector('.dlg-foot .ev-next');
     const goTo = (el) => { el.focus(); if (el.select && el.tagName === 'INPUT') try { el.select(); } catch (err) { /* not selectable */ } };

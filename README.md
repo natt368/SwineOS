@@ -28,7 +28,7 @@ Piglets lost between farrowing and weaning that were never entered as deaths are
 
 ## What it does
 
-**Main menu** – Data Entry on the left (Sows / Boars, Gilt pool, Action list entry, Vaccinations, Moved to Finisher, More options), Reports on the right (Sows / Gilts, Piglets, Boars, Sow cards, Herd performance, Action lists, Report generator), and PigMAIN for set-up options.
+**Main menu** (Herd Records) – Data Entry on the left (Sows / Boars, Gilt pool, Action list entry, Vaccinations, Moved to Finisher, More options), Reports on the right (Sows / Gilts, Piglets, Boars, Sow cards, Herd performance, Action lists, Report generator), and PigMAIN for set-up options.
 
 **Moved to Finisher** – the groups of pigs moved from the nursery rooms to the Finisher (date, pigs, from room, Finisher room), in place of the MOVED TO FINISHER sheet of the Expense & Income workbook: pigs moved this year, groups, average group and month, last move, pigs moved by month, and the list of moves (opens read-only; the pencil edits). Import the sheet on the Data management page (or from the empty screen). Saved and backed up with the rest of the records.
 
