@@ -111,14 +111,17 @@
         rows.push(datalist('dl-boars', bo));
         rows.push(ui().field('Boar / semen', ui().input('f-boar', e.boar || '', { list: 'dl-boars', autocomplete: 'off' })));
         rows.push(ui().field('Method', ui().select('f-method', ['AI', 'Natural', 'AI + Natural'], e.method || 'Natural')));
-        rows.push(ui().field('Technician', ui().select('f-tech', L.technicians, e.tech || '')));
+        // any name can be typed; the code list and the names used before are offered
+        const techs = [...new Set([...(L.technicians || []), ...S.store.animals().flatMap((x) => (x.events || []).filter((v) => v.type === 'mate' && v.tech).map((v) => v.tech))].filter(Boolean))].sort(U.natCmp);
+        rows.push(datalist('dl-techs', techs));
+        rows.push(ui().field('Technician', ui().input('f-tech', e.tech || '', { list: 'dl-techs', autocomplete: 'off', maxlength: 40 })));
         if (!existing) {
           rows.push(ui().field('2nd mating (next day)', ui().input('f-boar2', '', { list: 'dl-boars', autocomplete: 'off', placeholder: 'boar – optional' })));
           rows.push(ui().field('3rd mating (day after)', ui().input('f-boar3', '', { list: 'dl-boars', autocomplete: 'off', placeholder: 'boar – optional' })));
         }
         const wsiInfo = () => { info.textContent = r.lastWeanDate && r.status === 'Open' ? `Weaned ${U.fmt(r.lastWeanDate)} → interval ${U.diff(date.value, r.lastWeanDate)} days` : r.status === 'Served' ? `Already served ${U.fmt(r.lastService && r.lastService.date)} – this is a repeat service` : ''; };
         date.addEventListener('change', wsiInfo); wsiInfo();
-        Object.assign(get, { boar: () => U.$('#f-boar').value.trim(), method: () => U.$('#f-method').value, tech: () => U.$('#f-tech').value });
+        Object.assign(get, { boar: () => U.$('#f-boar').value.trim(), method: () => U.$('#f-method').value, tech: () => U.$('#f-tech').value.trim() });
         break;
       }
       case 'preg':
@@ -365,12 +368,12 @@
     return { animal: saved, errors: [], warnings };
   }
 
-  /** Values a "Save & next" carries to the next animal: date, the choice lists and the boar (numbers and remarks start empty). */
+  /** Values a "Save & next" carries to the next animal: date, the choice lists, the boar and the technician (numbers and remarks start empty). */
   function carryOf(host) {
     const c = {};
     host.querySelectorAll('input[id], select[id]').forEach((el) => {
       if (el.classList.contains('dt-native') || el.id === 'f-animal' || el.id === 'a-id') return;
-      if (el.tagName === 'SELECT' || el.classList.contains('dt') || ['f-boar', 'a-origin', 'a-line'].includes(el.id)) c[el.id] = el.value;
+      if (el.tagName === 'SELECT' || el.classList.contains('dt') || ['f-boar', 'f-tech', 'a-origin', 'a-line'].includes(el.id)) c[el.id] = el.value;
     });
     return c;
   }
