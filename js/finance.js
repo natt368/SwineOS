@@ -256,7 +256,8 @@
       kpi('Expenses', money(s.expense, 0), sub(s.expense, p && p.expense, false)),
       kpi('Hogs shipped', n(s.shipped), sub(s.shipped, p && p.shipped, true, hasPrev ? '' : 'Hog sales and cripples')),
       kpi('Profit / hog', money(s.profitPerHog), sub(s.profitPerHog, p && p.profitPerHog, true)),
-      kpi('Feed cost / hog', money(s.feedPerHog), sub(s.feedPerHog, p && p.feedPerHog, false, hasPrev ? '' : `${money(s.feedCost, 0)} feed in total`))));
+      kpi('Feed cost / hog', money(s.feedPerHog), sub(s.feedPerHog, p && p.feedPerHog, false, hasPrev ? '' : `${money(s.feedCost, 0)} feed in total`)),
+      fcrTile(y, last, s, hasPrev)));
 
     // monthly chart
     const chart = h('section.fin-card.fin-chart-card',
@@ -293,6 +294,29 @@
     wrap.csv = () => U.csv([cols.map(([l]) => l), ...months.map((m) => cols.map(([, f]) => f(m))), cols.map(([, f], i) => (i ? f(tot) : 'Total'))]);
     return wrap;
   }
+  /** The months the feed conversion can use: up to the last month with feed entered (sales often run ahead of it). */
+  function lastFeedMonth(y) {
+    const feed = new Set(cats().filter((c) => c.feed).map((c) => c.code));
+    let m = -1;
+    for (const r of recsOf(y, 'exp')) if (feed.has(Number(r.cat))) m = Math.max(m, +r.date.slice(5, 7) - 1);
+    return m;
+  }
+  /** Feed conversion of a year (live, whole herd), counted only up to the last month with feed entered. */
+  function feedConvOf(y, upto, s) {
+    const fm = Math.min(lastFeedMonth(y), upto);
+    if (fm < 0) return null;
+    const fc = (fm === upto && s ? s : summarize(y, fm)).feedConv;
+    return fc.kg ? { ...fc, upto: fm } : null;
+  }
+  function fcrTile(y, last, s, hasPrev) {
+    const fc = feedConvOf(y, last, s);
+    if (!fc) return kpi('Feed conversion', '', 'no feed quantities entered');
+    const prev = hasPrev ? feedConvOf(y - 1, fc.upto) : null;
+    const part = fc.upto < last ? `${monthName(0)}–${monthName(fc.upto)}` : '';
+    return kpi('Feed conversion', n(fc.live, 2), h('span', prev ? change(fc.live, prev.live, false) : null, prev ? ' ' : '',
+      [fc.pounds ? 'live (lb year)' : `${n(fc.carcass, 2)} carcass`, `${n(fc.perHog, 0)} kg/hog`, part].filter(Boolean).join(' · ')));
+  }
+
   function mini(label, value) { return h('div.fin-mini', h('span', label), h('b', value || '—')); }
 
   /* ---------- History: every year on file, side by side ---------- */
@@ -317,7 +341,8 @@
       kpi('Expenses', money(T.expense, 0), `${money(T.feed, 0)} of it feed`),
       kpi('Hogs shipped', n(T.shipped), `${n(T.shipped / ys.length)} a year on average`),
       kpi('Profit / hog', money(T.balance / T.shipped), 'all years together'),
-      kpi('Feed cost / hog', money(T.feed / T.shipped), 'all years together')));
+      kpi('Feed cost / hog', money(T.feed / T.shipped), 'all years together'),
+      kpi('Feed conversion', T.liveKg ? n(T.feedKg / T.liveKg, 2) : '', 'live, all years together')));
 
     // bars or lines: the switch redraws just the chart, and this computer remembers the choice
     const graph = () => pairChart(rows, { mode: histChart(), label: (i, narrow) => (narrow ? `'${String(rows[i].y).slice(2)}` : String(rows[i].y)), title: (i) => `${rows[i].y}${partial(rows[i]) ? ` (${monthName(0)}–${monthName(rows[i].last)})` : ''}`, aria: 'Income and expenses by year' });
@@ -1161,7 +1186,7 @@ body { font: 10.5px/1.45 "Inter", "Segoe UI", Arial, sans-serif; color: #1f2a4a;
 .fr-band .fr-meta b { display: block; font-size: 13px; opacity: 1; }
 .fr-run { display: flex; justify-content: space-between; color: #1d3fae; font-weight: 700; border-bottom: 2px solid #1d3fae; padding-bottom: 5px; margin-bottom: 12px; font-size: 11px; }
 .fr-run span:last-child { color: #5a6482; font-weight: 600; }
-.fr-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin: 14px 0; }
+.fr-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin: 14px 0; }
 .fr-kpi { border: 1.5px solid #dfe5f6; border-radius: 12px; padding: 10px 12px; }
 .fr-kpi span { display: block; color: #5a6482; font-size: 9.5px; text-transform: uppercase; letter-spacing: .8px; font-weight: 700; }
 .fr-kpi b { display: block; font-size: 19px; color: #1d3fae; margin: 2px 0 1px; font-variant-numeric: tabular-nums; }
@@ -1267,6 +1292,7 @@ tr { break-inside: avoid; }
         ${kpi('Hogs shipped', n(s.shipped), chg(s.shipped, p && p.shipped, true) || 'Hog sales and cripples')}
         ${kpi('Profit / hog', money(s.profitPerHog), chg(s.profitPerHog, p && p.profitPerHog, true))}
         ${kpi('Feed cost / hog', money(s.feedPerHog), chg(s.feedPerHog, p && p.feedPerHog, false) || `${money(s.feedCost, 0)} feed in total`)}
+        ${(() => { const fc = feedConvOf(y, last, s); return kpi('Feed conversion', fc ? n(fc.live, 2) : '', fc ? E([fc.pounds ? 'live' : `${n(fc.carcass, 2)} carcass`, `${n(fc.perHog, 0)} kg feed / hog`, fc.upto < last ? `${monthName(0)}–${monthName(fc.upto)}` : ''].filter(Boolean).join(' · ')) : ''); })()}
       </div>
       <div class="fr-card"><h2>Income and Expenses by month<span class="fr-legend"><i style="background:${INCOME}"></i>Income<i style="background:${EXPENSE}"></i>Expenses</span></h2>${reportChart(s.months, last)}</div>
       <div class="fr-two">
