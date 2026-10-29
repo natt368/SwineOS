@@ -91,13 +91,15 @@
     return { close, box, content };
   }
 
-  function confirmBox(title, message, okLabel = 'OK') {
+  /** opts.enterOk: the OK button has the focus, so Enter confirms (for checks during quick entry, never for deletes). */
+  function confirmBox(title, message, okLabel = 'OK', opts = {}) {
     return new Promise((resolve) => {
       let ok = false;
-      modal({ title, body: h('p.msg', message), width: 420, onClose: () => resolve(ok), buttons: [
+      const m = modal({ title, body: h('p.msg', message), width: 420, onClose: () => resolve(ok), buttons: [
         { label: okLabel, primary: true, onClick: () => { ok = true; } },
         { label: 'Cancel' },
       ] });
+      if (opts.enterOk) setTimeout(() => { const b = m.box.querySelector('.dlg-foot .primary'); if (b) b.focus(); }, 40);
     });
   }
 
