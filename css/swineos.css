@@ -819,6 +819,7 @@ button { cursor: pointer; }
 .fin-table tfoot tr.sub:last-child td { border-top: 2px solid var(--royal); color: var(--royal); }
 .fin-key th { color: #33405f; font-weight: 600; font-size: 13px; border-bottom: 1px solid #eef1f8; width: 1%; }
 .fin-key td.num { font-weight: 700; color: #1f2a4a; }
+.fin-key td.fin-muted { white-space: normal; width: 55%; line-height: 1.35; }
 
 .fin-list-card { padding: 0; overflow: hidden; }
 .fin-filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; padding: 14px 16px 10px; }

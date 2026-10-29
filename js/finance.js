@@ -1113,18 +1113,22 @@
   /** Year-end key figures: [label, value, note]. */
   function keyFigures(y, s) {
     const sowsSet = Number(finSettings().sows[y]);
+    // feed conversion only over the months with feed entered (like the Overview tile)
+    const last = lastMonth(y);
+    const fc = feedConvOf(y, last, s) || s.feedConv;
+    const part = fc.upto !== undefined && fc.upto < last ? `${monthName(0)}–${monthName(fc.upto)} (the months with feed entered); ` : '';
     return [
       ['Average breeding females', s.sows ? n(s.sows) : '—', sowsSet ? 'set in Finance settings' : s.sows ? 'from the herd records' : 'set it in Finance settings'],
       ['Total income', money(s.income)], ['Total expenses', money(s.expense)], ['Balance', money(s.balance)], ['Profit', pct(s.margin), 'of income'],
       ['Hogs shipped', n(s.shipped), 'hog sales and cripples'], ['Income / hog shipped', money(s.incomePerHog)], ['Expenses / hog shipped', money(s.costPerHog)], ['Profit / hog shipped', money(s.profitPerHog)],
       ['Feed cost', money(s.feedCost)], ['Feed cost / hog shipped', money(s.feedPerHog)],
-      ['Feed fed', s.feedConv.kg ? `${n(s.feedConv.kg / 1000, 1)} t` : '—', ['quantities of the feed expenses (bushels at the weights in Finance settings)',
-        s.feedConv.notCounted ? `${money(s.feedConv.notCounted, 0)} in ${s.feedConv.notCountedUnits.join(', ')} not counted` : '',
-        s.feedConv.fixed ? `${s.feedConv.fixed} ${s.feedConv.fixed === 1 ? 'line' : 'lines'} with tons and kg mixed up read by their price` : ''].filter(Boolean).join('; ')],
-      ['Feed / hog shipped', s.feedConv.kg ? `${n(s.feedConv.perHog, 0)} kg` : '—'],
-      ['Feed conversion, carcass', s.feedConv.kg && !s.feedConv.pounds ? n(s.feedConv.carcass, 2) : '—', s.feedConv.pounds ? 'this year\'s hog weights are live pounds' : 'kg feed ÷ kg carcass of the hog sales'],
-      ['Feed conversion, live (whole herd)', s.feedConv.kg ? n(s.feedConv.live, 2) : '—', s.feedConv.pounds ? 'kg feed ÷ kg live: hog sales (live pounds), cripples and culls' : `kg feed ÷ kg live: hog sales at ${s.feedConv.dressing}% dressing, cripples and culls`],
-      ['Feed cost / kg carcass', money(s.feedConv.costPerKgCarcass, 3)],
+      ['Feed fed', fc.kg ? `${n(fc.kg / 1000, 1)} t` : '—', [`${part}quantities of the feed expenses (bushels at the weights in Finance settings)`,
+        fc.notCounted ? `${money(fc.notCounted, 0)} in ${fc.notCountedUnits.join(', ')} not counted` : '',
+        fc.fixed ? `${fc.fixed} ${fc.fixed === 1 ? 'line' : 'lines'} with tons and kg mixed up read by their price` : ''].filter(Boolean).join('; ')],
+      ['Feed / hog shipped', fc.kg ? `${n(fc.perHog, 0)} kg` : '—', part ? part.replace(/; $/, '') : ''],
+      ['Feed conversion, carcass', fc.kg && !fc.pounds ? n(fc.carcass, 2) : '—', fc.pounds ? 'this year\'s hog weights are live pounds' : 'kg feed ÷ kg carcass of the hog sales'],
+      ['Feed conversion, live (whole herd)', fc.kg ? n(fc.live, 2) : '—', fc.pounds ? 'kg feed ÷ kg live: hog sales (live pounds), cripples and culls' : `kg feed ÷ kg live: hog sales at ${fc.dressing}% dressing, cripples and culls`],
+      ['Feed cost / kg carcass', money(fc.costPerKgCarcass, 3)],
       ['Income / breeding female / year', s.sows ? money(s.incomePerSow) : '—'], ['Hogs shipped / breeding female / year', s.sows ? n(s.shippedPerSow, 1) : '—'],
       ['Hogs sold (hog sales)', n(s.hog.head)], ['Average $ / hog sold', money(s.hog.perHog)], ['Average weight / hog sold', n(s.hog.avgWt, 1) + ' kg'], ['Total weight sold', n(s.hog.totalWt, 0) + ' kg'],
       ['Average index', n(s.hog.index, 2)], ['Average price', money(s.hog.price, 4), 'average of the loads'], ['Average fat', n(s.hog.fat, 1)], ['Average lean', n(s.hog.lean, 1)],
@@ -1156,9 +1160,9 @@
       h('tfoot', h('tr.sub', h('td', 'Total income'), h('td.num', n(U.sum(Object.values(s.streams).map((t) => t.head)))), h('td.num', money(s.income)), h('td'), h('td.num', '100.0%'))));
     const partial = lastMonth(y) < 11 && `${y}` >= U.today().slice(0, 4) ? h('p.fin-note', `${y} so far: ${monthName(0)} to ${monthName(lastMonth(y))}.`) : null;
     wrap.append(partial || '',
-      h('div.fin-two.wide-first',
-        h('section.fin-card', h('div.fin-card-head', h('h2', `Year end ${y}`)), h('div.fin-scroll', keyTable)),
-        h('section.fin-card', h('div.fin-card-head', h('h2', 'Income')), h('div.fin-scroll', incTable))),
+      // the key figures get the whole width (their notes are long); Income goes below
+      h('section.fin-card', h('div.fin-card-head', h('h2', `Year end ${y}`)), h('div.fin-scroll', keyTable)),
+      h('section.fin-card', h('div.fin-card-head', h('h2', 'Income')), h('div.fin-scroll', incTable)),
       h('section.fin-card', h('div.fin-card-head', h('h2', 'Expenses by type'), h('span.fin-muted', 'Click Finance settings to rename types or change which count as feed')), h('div.fin-scroll', catTable)));
     wrap.printNode = () => h('div', h('h4', 'Key figures'), keyTable.cloneNode(true), h('h4', 'Income'), incTable.cloneNode(true), h('h4', 'Expenses by type'), catTable.cloneNode(true));
     wrap.printTitle = `Year end ${y}`;
