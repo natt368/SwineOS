@@ -110,7 +110,7 @@
         const bo = boarOptions();
         rows.push(datalist('dl-boars', bo));
         rows.push(ui().field('Boar / semen', ui().input('f-boar', e.boar || '', { list: 'dl-boars', autocomplete: 'off' })));
-        rows.push(ui().field('Method', ui().select('f-method', ['AI', 'Natural', 'AI + Natural'], e.method || 'AI')));
+        rows.push(ui().field('Method', ui().select('f-method', ['AI', 'Natural', 'AI + Natural'], e.method || 'Natural')));
         rows.push(ui().field('Technician', ui().select('f-tech', L.technicians, e.tech || '')));
         if (!existing) {
           rows.push(ui().field('2nd mating (next day)', ui().input('f-boar2', '', { list: 'dl-boars', autocomplete: 'off', placeholder: 'boar – optional' })));
@@ -164,7 +164,8 @@
         Object.assign(get, { count: () => +U.$('#f-count').value || 0, otherSow: () => U.$('#f-other').value.trim() });
         break;
       case 'partwean': case 'wean':
-        rows.push(ui().field('Pigs weaned', ui().input('f-count', e.count ?? (type === 'wean' ? Math.max(0, r.piglets) : ''), { type: 'number', min: 0, max: 40, inputmode: 'numeric' })));
+        // pigs weaned comes first, above the date: the number is what changes from sow to sow
+        rows.unshift(ui().field('Pigs weaned', ui().input('f-count', e.count ?? (type === 'wean' ? Math.max(0, r.piglets) : ''), { type: 'number', min: 0, max: 40, inputmode: 'numeric' })));
         rows.push(ui().field('Total weight (kg)', ui().input('f-weight', e.weight ?? '', { type: 'number', step: '0.1', min: 0, inputmode: 'decimal' })));
         if (type === 'wean' && !existing) rows.push(ui().field('Move sow to', ui().select('f-loc', [''].concat(L.locations), L.locations.includes('Breeding') ? 'Breeding' : '')));
         Object.assign(get, { count: () => +U.$('#f-count').value || 0, weight: () => (U.$('#f-weight').value ? +U.$('#f-weight').value : undefined) });
@@ -308,7 +309,7 @@
     const v = validate(a, ev, editingEid);
     if (v.errors.length) { await ui().alertBox('Cannot save', v.errors.join('\n')); return false; }
     if (v.warnings.length) {
-      const ok = await ui().confirmBox('Please check', v.warnings.join('\n') + '\n\nSave anyway?', 'Save anyway');
+      const ok = await ui().confirmBox('Please check', v.warnings.join('\n') + '\n\nSave anyway?', 'Save anyway', { enterOk: true });
       if (!ok) return false;
     }
     let events = [...(a.events || [])];
@@ -418,8 +419,8 @@
     const buttons = existing
       ? [{ label: 'Save changes', primary: true, onClick: async () => { const res = await save(); if (!res) return true; done && done(res); return false; } }, { label: 'Cancel' }]
       : [
-        { label: 'Save', primary: !chain, onClick: async () => { const res = await save(); if (!res) return true; done && done(res); return false; } },
-        { label: 'Save & next', primary: chain, title: 'Save, then enter the same event for the next animal', onClick: async () => {
+        { label: 'Save', onClick: async () => { const res = await save(); if (!res) return true; done && done(res); return false; } },
+        { label: 'Save & next', primary: true, cls: 'ev-next', title: 'Save, then enter the same event for the next animal (Enter from the last box)', onClick: async () => {
           const res = await save(); if (!res) return true;
           const keep = carryOf(host);
           done && done(res);
@@ -429,8 +430,41 @@
         { label: 'Cancel' },
       ];
     m = ui().modal({ title: titleFor(cur), body: h('div', idBox ? h('div.form.ev-animal', ui().field('Animal ID', idBox)) : null, host), width: 520, buttons });
-    // the first dialog starts in the form (the animal is chosen already); "next" dialogs start in the ID box
-    if (!chain && idBox) setTimeout(() => { const fs = [...host.querySelectorAll('input:not(.dt):not(.dt-native):not([disabled]), select:not([disabled])')]; if (fs[0]) fs[0].focus(); }, 45);
+    // the first dialog starts in the form (the animal is chosen already): a mating at its date, other events at the
+    // first box after the date; "next" dialogs start in the ID box
+    if (!chain && idBox) setTimeout(() => { const first = type === 'mate' ? host.querySelector('#f-date') : null; const fs = [...host.querySelectorAll('input:not(.dt):not(.dt-native):not([disabled]), select:not([disabled])')]; const el = first || fs[0]; if (el) { el.focus(); if (el.select) el.select(); } }, 45);
+    if (!existing) quickEnter(m, host, idBox, type, () => { const x = S.store.findById(idBox.value.trim()); if (x !== cur || !x) build(x ? S.store.get(x.uid) || x : null); });
+  }
+
+  /**
+   * Quick entry with the Enter key: each Enter goes to the next box, and after the last one to "Save & next".
+   * A weaning only needs the pigs weaned and the date: Enter goes from the date straight to "Save & next"
+   * (weight, location and remarks can still be clicked). Enter in the Animal ID box shows that animal's form at once.
+   */
+  const ENTER_STOPS = { wean: ['f-count', 'f-date'], partwean: ['f-count', 'f-date'] };
+  function quickEnter(m, host, idBox, type, lookup) {
+    const next = () => m.box.querySelector('.dlg-foot .ev-next');
+    const goTo = (el) => { el.focus(); if (el.select && el.tagName === 'INPUT') try { el.select(); } catch (err) { /* not selectable */ } };
+    const boxes = () => {
+      const stops = ENTER_STOPS[type];
+      if (stops) return stops.map((id) => host.querySelector('#' + id)).filter((el) => el && !el.disabled);
+      return [...host.querySelectorAll('input:not(.dt-native):not([disabled]):not([type=checkbox]), select:not([disabled])')].filter((el) => el.offsetParent !== null);
+    };
+    m.box.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || e.isComposing || !['INPUT', 'SELECT'].includes(e.target.tagName)) return;
+      if (U.$$('.modal-back').pop() !== m.box.parentElement) return; // a message on top has the keys
+      const list = boxes();
+      let to = null;
+      if (idBox && e.target === idBox) { lookup(); to = boxes()[0] || null; if (!to) return; } // no animal yet: leave it to the dialog
+      else {
+        const i = list.indexOf(e.target);
+        if (i < 0) return; // a box off the Enter path (weight, remarks…): the dialog's own Enter
+        to = list[i + 1] || next();
+      }
+      e.preventDefault(); e.stopPropagation();
+      if (e.target.classList.contains('dt')) e.target.dispatchEvent(new Event('change', { bubbles: true })); // a typed date is read before leaving
+      if (to) goTo(to);
+    }, true);
   }
 
   /* ================= animal entry / details ================= */
