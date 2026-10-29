@@ -373,7 +373,7 @@
   function carryOf(host) {
     const c = {};
     host.querySelectorAll('input[id], select[id]').forEach((el) => {
-      if (el.classList.contains('dt-native') || el.id === 'f-animal' || el.id === 'a-id') return;
+      if (el.classList.contains('dt-native') || el.id === 'f-animal' || el.id === 'a-id' || el.id === 'f-result') return; // each check starts positive
       if (el.tagName === 'SELECT' || el.classList.contains('dt') || ['f-boar', 'f-tech', 'a-origin', 'a-line'].includes(el.id)) c[el.id] = el.value;
     });
     return c;
@@ -434,19 +434,20 @@
         { label: 'Cancel' },
       ];
     m = ui().modal({ title: titleFor(cur), body: h('div', idBox ? h('div.form.ev-animal', ui().field('Animal ID', idBox)) : null, host), width: 520, buttons });
-    // the first dialog starts in the form (the animal is chosen already): a mating at its date, other events at the
+    // the first dialog starts in the form (the animal is chosen already): a mating or pregnancy check at its date, other events at the
     // first box after the date; "next" dialogs start in the ID box
-    if (!chain && idBox) setTimeout(() => { const first = type === 'mate' ? host.querySelector('#f-date') : null; const fs = [...host.querySelectorAll('input:not(.dt):not(.dt-native):not([disabled]), select:not([disabled])')]; const el = first || fs[0]; if (el) { el.focus(); if (el.select) el.select(); } }, 45);
+    if (!chain && idBox) setTimeout(() => { const first = type === 'mate' || type === 'preg' ? host.querySelector('#f-date') : null; const fs = [...host.querySelectorAll('input:not(.dt):not(.dt-native):not([disabled]), select:not([disabled])')]; const el = first || fs[0]; if (el) { el.focus(); if (el.select) el.select(); } }, 45);
     if (!existing) quickEnter(m, host, idBox, type, () => { const x = S.store.findById(idBox.value.trim()); if (x !== cur || !x) build(x ? S.store.get(x.uid) || x : null); });
   }
 
   /**
    * Quick entry with the Enter key: each Enter goes to the next box, and after the last one to "Save & next".
-   * A weaning only needs the pigs weaned and the date, a farrowing the born alive, stillborn, mummies and the date:
+   * A weaning only needs the pigs weaned and the date, a farrowing the born alive, stillborn, mummies and the date,
+   * a pregnancy check the date (it is positive unless changed):
    * Enter goes from the date straight to "Save & next" (weights, location, assisted and remarks can still be clicked).
    * Enter in the Animal ID box shows that animal's form at once.
    */
-  const ENTER_STOPS = { wean: ['f-count', 'f-date'], partwean: ['f-count', 'f-date'], farrow: ['f-lb', 'f-sb', 'f-mm', 'f-date'] };
+  const ENTER_STOPS = { wean: ['f-count', 'f-date'], partwean: ['f-count', 'f-date'], farrow: ['f-lb', 'f-sb', 'f-mm', 'f-date'], preg: ['f-date'] };
   function quickEnter(m, host, idBox, type, lookup) {
     const next = () => m.box.querySelector('.dlg-foot .ev-next');
     const goTo = (el) => { el.focus(); if (el.select && el.tagName === 'INPUT') try { el.select(); } catch (err) { /* not selectable */ } };
