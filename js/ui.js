@@ -104,7 +104,10 @@
   }
 
   function alertBox(title, message) {
-    return new Promise((resolve) => modal({ title, body: h('p.msg', message), width: 420, onClose: resolve, buttons: [{ label: 'OK', primary: true }] }));
+    return new Promise((resolve) => {
+      const m = modal({ title, body: h('p.msg', message), width: 420, onClose: resolve, buttons: [{ label: 'OK', primary: true }] });
+      setTimeout(() => { const b = m.box.querySelector('.dlg-foot .primary'); if (b) b.focus(); }, 40); // Enter closes it
+    });
   }
 
   /* ---------- application window (title bar + toolbar) ---------- */

@@ -132,9 +132,10 @@
         break;
       case 'abort': break;
       case 'farrow': {
-        rows.push(ui().field('Born alive', ui().input('f-lb', e.liveBorn ?? '', { type: 'number', min: 0, max: 40, inputmode: 'numeric' })));
-        rows.push(ui().field('Stillborn', ui().input('f-sb', e.stillborn ?? 0, { type: 'number', min: 0, max: 30, inputmode: 'numeric' })));
-        rows.push(ui().field('Mummies', ui().input('f-mm', e.mummies ?? 0, { type: 'number', min: 0, max: 30, inputmode: 'numeric' })));
+        // the litter's numbers come first, above the date: they are what changes from sow to sow
+        rows.unshift(ui().field('Born alive', ui().input('f-lb', e.liveBorn ?? '', { type: 'number', min: 0, max: 40, inputmode: 'numeric' })),
+          ui().field('Stillborn', ui().input('f-sb', e.stillborn ?? 0, { type: 'number', min: 0, max: 30, inputmode: 'numeric' })),
+          ui().field('Mummies', ui().input('f-mm', e.mummies ?? 0, { type: 'number', min: 0, max: 30, inputmode: 'numeric' })));
         rows.push(ui().field('Litter birth weight (kg)', ui().input('f-bw', e.birthWeight ?? '', { type: 'number', step: '0.1', min: 0, inputmode: 'decimal' })));
         rows.push(ui().field('Farrowing location', ui().select('f-loc', [''].concat(L.locations), e.location || r.location || '')));
         rows.push(ui().field('Assisted farrowing', h('input', { id: 'f-assist', type: 'checkbox', checked: !!e.assisted })));
@@ -441,10 +442,11 @@
 
   /**
    * Quick entry with the Enter key: each Enter goes to the next box, and after the last one to "Save & next".
-   * A weaning only needs the pigs weaned and the date: Enter goes from the date straight to "Save & next"
-   * (weight, location and remarks can still be clicked). Enter in the Animal ID box shows that animal's form at once.
+   * A weaning only needs the pigs weaned and the date, a farrowing the born alive, stillborn, mummies and the date:
+   * Enter goes from the date straight to "Save & next" (weights, location, assisted and remarks can still be clicked).
+   * Enter in the Animal ID box shows that animal's form at once.
    */
-  const ENTER_STOPS = { wean: ['f-count', 'f-date'], partwean: ['f-count', 'f-date'] };
+  const ENTER_STOPS = { wean: ['f-count', 'f-date'], partwean: ['f-count', 'f-date'], farrow: ['f-lb', 'f-sb', 'f-mm', 'f-date'] };
   function quickEnter(m, host, idBox, type, lookup) {
     const next = () => m.box.querySelector('.dlg-foot .ev-next');
     const goTo = (el) => { el.focus(); if (el.select && el.tagName === 'INPUT') try { el.select(); } catch (err) { /* not selectable */ } };
