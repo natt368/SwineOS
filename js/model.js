@@ -57,6 +57,9 @@
         { code: 19, name: 'Grain', feed: true }, { code: 20, name: 'Soy', feed: true }, { code: 21, name: 'Other', feed: false },
       ],
       sows: {},
+      // feed conversion: hog sales weights are carcass weights (dressing % turns them into live weight),
+      // grain bought or fed from the bins in bushels is turned into kg with these bushel weights
+      fcr: { dressing: 80, bushel: { BARLEY: 21.77, WHEAT: 27.22, OATS: 15.42, CORN: 25.4 }, otherBushel: 21.77 },
     },
   };
 
