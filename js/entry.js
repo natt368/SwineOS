@@ -301,7 +301,7 @@
       case 'editid': {
         if (!ev.newId) errors.push('Enter the new ID.');
         const clash = S.store.findById(ev.newId);
-        if (clash && clash.uid !== a.uid && !A(clash).removed) errors.push(`ID ${ev.newId} is already used by an active animal.`);
+        if (clash && clash.uid !== a.uid && !A(clash).removed) errors.push(`ID ${ev.newId} belongs to an animal still in the herd (${A(clash).status}). An ID can only be used again once that animal has been removed (culled, dead or sold).`);
         break;
       }
       default: break;
@@ -531,20 +531,47 @@
     return { node, read };
   }
 
+  /**
+   * Can a new animal take this ID? Only when no animal in the herd has it: an ID can be used again once the
+   * animal that had it has left the herd (culled, dead, sold or otherwise removed). Its history stays on file.
+   * Returns { ok, active, old } — active: the animal in the herd that has it; old: the latest removed one.
+   */
+  function idFree(id) {
+    const t = String(id || '').trim().toLowerCase();
+    const same = t ? S.store.animals().filter((x) => String(x.id).toLowerCase() === t) : [];
+    const active = same.find((x) => !A(x).removed) || null;
+    const old = same.filter((x) => A(x).removed).sort((x, y) => String(A(x).statusDate || '').localeCompare(String(A(y).statusDate || ''))).pop() || null;
+    return { ok: !active, active, old };
+  }
+  const reuseNote = (o) => `ID ${o.id} was used before by a ${o.sex === 'M' ? 'boar' : 'sow'} that is ${A(o).status.toLowerCase()}${A(o).statusDate ? ' (' + U.fmt(A(o).statusDate) + ')' : ''}. The new animal gets the same ID; the old one's history is kept under Removed.`;
+  const inHerdNote = (x) => `ID ${x.id} belongs to a ${x.sex === 'M' ? 'boar' : 'sow'} that is still in the herd (${A(x).status}). An ID can only be used again once that animal has been removed from the herd (culled, dead or sold).`;
+
   function openEntryDialog(id, done, carry) {
     const chain = carry !== undefined;
     const f = animalForm({ id }, true);
     if (chain) setTimeout(() => applyCarry(f.node, carry), 0);
+    // say right away when the ID belonged to an animal that has left the herd, or is still in use
+    const note = h('div.form-info.id-reuse', { hidden: true });
+    const idEl = f.node.querySelector('#a-id');
+    const showNote = () => {
+      const c = idFree(idEl.value);
+      note.hidden = !(c.active || c.old);
+      note.classList.toggle('bad', !!c.active);
+      note.textContent = c.active ? inHerdNote(c.active) : c.old ? reuseNote(c.old) : '';
+    };
+    idEl.closest('.frow').after(note);
+    idEl.addEventListener('input', showNote);
+    showNote();
     async function save() {
       const v = f.read();
       if (!v.id) { await ui().alertBox('Cannot save', 'Enter an ID.'); return null; }
-      const clash = S.store.findById(v.id);
-      if (clash && !A(clash).removed) { await ui().alertBox('Cannot save', `ID ${v.id} is already used by an active animal.`); return null; }
+      const free = idFree(v.id);
+      if (!free.ok) { await ui().alertBox('Cannot save', inHerdNote(free.active)); return null; }
       if (!v.arrivalDate && !v.entryDate) { await ui().alertBox('Cannot save', 'Enter an arrival or herd entry date.'); return null; }
       if (!v.arrivalDate) v.arrivalDate = v.entryDate;
       if (v.birthDate && v.arrivalDate && v.arrivalDate < v.birthDate) { await ui().alertBox('Cannot save', 'Arrival is before birth.'); return null; }
       const a = await S.store.saveAnimal({ uid: U.uid(v.sex === 'M' ? 'b' : 's'), ...v, events: [] });
-      S.store.log(`Entered new ${v.sex === 'M' ? 'boar' : 'female'} ${v.id}`);
+      S.store.log(`Entered new ${v.sex === 'M' ? 'boar' : 'female'} ${v.id}${free.old ? ' (ID used before by a removed animal)' : ''}`);
       ui().toast(`${v.id} entered.`, 'ok');
       return a;
     }
@@ -833,11 +860,16 @@
         return;
       }
       select(a);
-      if (st.tab === 'entry') { ui().toast(`${a.id} already exists – showing its history.`); return; }
+      if (st.tab === 'entry') {
+        // an animal that has left the herd gives up its ID: offer to enter a new animal with it
+        if (A(a).removed) { ui().confirmBox('ID used before', `${reuseNote(a)}\n\nEnter a new animal with ID ${a.id}?`, 'Enter new animal').then((ok) => { if (ok) openEntryDialog(a.id, (n) => select(n)); }); return; }
+        ui().toast(`${a.id} is in the herd (${A(a).status}) – showing its history. Its ID can be used again once it is removed from the herd.`);
+        return;
+      }
       enter();
     }
     function enter() {
-      if (st.tab === 'entry') { openEntryDialog(idInput.value.trim() && !S.store.findById(idInput.value.trim()) ? idInput.value.trim() : '', (n) => select(n)); return; }
+      if (st.tab === 'entry') { const t = idInput.value.trim(); openEntryDialog(t && idFree(t).ok ? t : '', (n) => select(n)); return; }
       const a = st.sel;
       if (!a) { ui().toast('Type an ID and press Enter, or pick an animal in the list.'); idInput.focus(); return; }
       openEventDialog(st.tab, S.store.get(a.uid) || a, null, (u) => { select(u); idInput.focus(); idInput.select(); });

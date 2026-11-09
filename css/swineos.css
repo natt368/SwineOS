@@ -1111,3 +1111,4 @@ button { cursor: pointer; }
 /* month-end rows filled in for you: last month's figures show faintly until typed over */
 .fin-bulk tr.fin-bulk-pre td { background: #f7f9ff; }
 .fin-bulk tr.fin-bulk-pre input::placeholder { color: #9aa6c8; font-style: italic; }
+.form-info.id-reuse.bad { background: #fdecea; border-color: #e0a39b; color: #8c2a1c; }
